@@ -1,0 +1,108 @@
+2011-04-14: version 2.1.1
+	* Improved reassembly logic for retransmitted/overlapping packets
+2011-04-04: version 2.0.4
+	* Added new statistics to CapEnvGetMemoryUsage()
+	* Fixed problems with infinitely growing server list for SSL traffic
+	* Added max tcp sessions and max cached packets constraints
+2010-01-18: version 2.0.1
+	* Fixed problem with missing callback being called with huge byte counters
+	* Process all unacknowledged data when TCP session closes
+	* Handle ACK's in RST and other finishing packets
+	* Fixed TCP reassembly bug causing wrong packet processing order
+	* Fix for TCP reassembly "deadlock" caused by ACK packet sequence
+	* Cleaned-up duplicate SessionToString and AddressToString functions
+	* Added TLS session ticket table cleanup code
+	* Added "link_type" field to DSSL packet structure
+	* Added SSL key auto-mapping functionality
+	* Fixed SSL v2 handshake protocol parsing regression
+	* Fixed SSL v2 session renegotiation parsing
+	* Got unit tests working on most Unix platforms
+	* Various project file updates
+2009-12-29: version 1.7.3
+	* Added TCP session timeout parameter to CapEnvCreate
+	* Fixed incorrect reassembly of TCP sessions with missing SYN packets
+	* Added DSSL_TCPSTREAM_SENT_RST TcpStream flag
+2009-10-07: version 1.7.2
+	* Added DSSL_EnvSetServerInfoWithKey() function for existing RSA private keys
+2009-09-23: version 1.7.1
+	* Added memory usage reporting API - see CapEnvGetMemoryUsage for details
+	* Fixed max SSL record length check to allow zero-length SSL records
+2009-09-15: version 1.7.0
+	* Fixed TCP reassembly problem causing SSL session losses if SYN packet from the server is processed before SYN+ACK one 
+	* Added max SSL record length check
+	* Fixed bug in reassembly queue size check logic
+2009-09-07: version 1.6.9
+	* Fixed bug in TCP reassembly queue size management
+2009-08-14: version 1.6.8
+	* Last cleanup time of SSL session key cache was never being updated
+	* Fixed severe performance problems with SSL session key cache
+2009-08-13: version 1.6.7
+	* Added SYN/SYN+ACK and first ACK timestamp tracking in TcpStream
+2009-06-20: version 1.6.6
+	* Copyright changed to Atomic Labs, Inc.
+	* Misc autoconf cleanup to sync with Pion repositories
+2009-04-28: version 1.6.5
+	* Minor fixes in VC++ project files, unit tests, etc.
+2009-03-31: version 1.6.4
+	* Fixed spurious missing packet callbacks
+	* Now flushing packets remaining in TCP sessions when closing (r79)
+2009-03-27: version 1.6.3
+        * Reverting flushing logic change (r79) due to regression
+	* Added VC project file patch for Windows server 2008
+2009-03-26: version 1.6.2
+	* Fixed duplicate SYN packet bug
+	* Fixed missing SYN,ACK packet bug
+	* Improved TCP session flushing logic
+2009-03-16: version 1.6.0
+	* Fixed multiple session between the same srcIP:port<->targetIP:port
+	* Fixed FIN packet handling 
+2009-02-09: version 1.5.2
+	* Added TCP session statistics
+	* Added SSL handshake completed event callback
+2009-01-22: version 1.5.1
+	* Added missing packet callback capability to support partially captured TCP sessions
+	* Added ACK time information to TCP packets
+	* Main callback routine changed to include a pointer to the last captured frame 
+2009-01-09: version 1.4.6
+	* SSL Session ID length check bug fixed - thanks to Michael Dickey from Atomic Labs (http://www.atomiclabs.com) 
+	* Fixed TCP packet retransmission reassembly bug
+	* Improved out-of-order packet handling performance in TCP reassembler
+	* Improved TCP reassembly algorithm for out-of-order TCP packet processing
+2008-12-05: version 1.4.4
+	* Fixed TCP session hashing bug - thanks to Faisal Shaikh
+	* TCP session timeout set to 180 seconds
+2008-11-30: version 1.4.3
+	* Fixed memory leak in TCP session processing
+	* Added TCP session table cleanup
+2008-09-25: version 1.4
+	* Added ACK control to TCP stream processing
+2008-09-18: version 1.3.3
+	* Added session start timestamp to the TCP session object
+2008-07-11: version 1.3.2
+	* Missing const keyword added to SessionSetUserData function
+	* TCP session capture can no longer start from the middle of TCP session
+2008-07-05: version 1.3.1
+	* Fixed wrong ASSERT statement bug in decoder.c
+2008-05-06: version 1.3.0
+	* Added SSL version 2.0 support
+	* Fixed TCP reassembly bug
+2008-03-23: version 1.2.0
+	* Added DEFLATE compression support (RFC 3749)
+	* Added MacOS support - thanks to Michael Dickey from Atomic Labs (http://www.atomiclabs.com)
+2007-06-05: version 1.0.3
+	* Fixed session management bug causing non-existing empty sessions being created and destroyed
+	* Added ssltrace sample - a simple command line utility that dumps decrypted SSL data
+	* Added server's certificate check to make sure the cert is signed with the same private key DSSL initialized with
+	* New error codes added (see errors.h)
+	* Fixed SSL decryption engine: block cipher padding length check added to prevent possible buffer overrun condition
+	* Fixed NULL password parameter was causing a segmentation fault (access violation on Win32)
+2007-04-19: build 1.0.2
+	* DSSL_NO_PCAP define added. Now you can compile DSSL without referencing functions from pcap library.
+
+2007-03-26: version 1.0.1
+	* Fix RSA private key file loading errors.
+	* Fix memory leak in MAC calculation.
+
+2007-01-17: version 1.0.0
+	* First public release.
+

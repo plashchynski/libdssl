@@ -1,0 +1,22 @@
+DSSL library: network capture and SSL decryption toolkit
+
+Copyright (C) 2007-2009 Atomic Labs, Inc.
+
+To view the installation documentation, load docs/index.html into your browser.
+
+For UNIX systems:
+
+# ./autogen.sh  (only required if using subversion checkout)
+# ./configure   (run ./configure --help to see available options)
+# make all      (this will build everything except DSSL's unit tests)
+# make install  (this may require superuser/Administrator privileges)
+
+For Universal binaries on OSX, change this line in configure.in:
+
+CFLAGS="-DDSSL"
+
+to this:
+
+CFLAGS="-DDSSL -arch i386 -arch x86_64 -arch ppc -arch ppc64"
+ 
+And run "./configure --disable-dependency-tracking"

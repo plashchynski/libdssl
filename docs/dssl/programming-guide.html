@@ -1,0 +1,95 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+	<head>
+		<title>Programming Guide - DSSL Library Documentation</title>
+		<meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+	</head>
+	<body>
+		<h1 align="center">DSSL Library Documentation</h1>
+		<p align="center">Version 1.3.2</p>
+		<h2>DSSL Programming Guide</h2>
+		<p>The best way to learn DSSL is by looking into <b>ssltrace</b> sample program 
+			that is located in <i>samples</i> subdirectory of DSSL installation v. 1.0.3</p>
+		<p>There are two different ways you can use DSSL: as a full-featured framework or 
+			just the SSL decryption module alone.</p>
+		<h3><a name="framework">I. Using DSSL Framework</a></h3>
+		<p>If you plan to use DSSL as your main TCP reassembly, session management, and SSL 
+			decryption module, you need to:</p>
+		<ul>
+			<li>
+				Create a <code>CapEnv</code> object and attach it to your <code>pcap_t</code> capture 
+				handle using <code>CapEnvCreate</code> function.</li>
+			<li>
+				Call <code>CapEnvSetSSL_ServerInfo</code> for each SSL server, which traffic 
+				you want CapEnv to decrypt</li>
+			<li>
+				Use <code>CapEnvSetSessionCallback</code> function to set up a session callback 
+				routine that will be called every time CapEnv is about to create a new session 
+				(DSSL_EVENT_NEW_SESSION) or an existing session is about to be closed 
+				(DSSL_EVENT_SESSION_CLOSING).
+			</li>
+			<li>
+				When your session callback function is called with DSSL_EVENT_NEW_SESSION 
+				event, set the data and error callback functions for a newly created session. 
+				These functions will be called when new data is available on a session, and 
+				when DSSL encounters an error while processing session packet, respectively.</li>
+			<li>
+				Call <code>CapEnvCapture</code> to start the capture on the <code>pcap_t</code> 
+				handle associated with your CapEnv instance. You’ll get your callback functions 
+				called as the data start passing through. <i>Remember that the callback functions 
+					must not block!</i></li>
+			<li>
+				After you are done with the CapEnv object, call CapEnvDestroy.</li>
+		</ul>
+		<h3><a name="sslonly">II. Using SSL Decryption Layer only</a></h3>
+		<h4>1. General Considerations</h4>
+		<p>If you already have the TCP layer reassembly and session management code, but 
+			want to use DSSL for SSL decryption, you need to follow these steps:</p>
+		<ol>
+			<li>
+				Creare a DSSL_Env structure using DSSL_EnvCreate function.</li>
+			<li>
+				Call DSSL_EnvSetServerInfo function for each SSL server, which traffic you want 
+				to decrypt.</li>
+			<li>
+				When you see a new SSL session in a captured traffic, create a <code>DSSL_Session</code>
+				object using <code>DSSL_EnvCreateSession</code> function.</li>
+			<li>
+				For a new SSL session, call <code>DSSL_SessionSetCallback</code> to set your 
+				application data and error callback routines.</li>
+			<li>
+				When a new network packet arrives, resolve the corresponding DSSL_Session 
+				object and call <code>DSSL_SessionProcessData</code> function to process the 
+				data. Note that <code>DSSL_SessionProcessData</code> function expects a pointer 
+				to the TCP payload part of the packet, not the whole packet!</li>
+			<li>
+				DSSL will call the data callback routine set in step 4 each time new chunk of 
+				data is deciphered.</li>
+			<li>
+				When a session terminates, call <code>DSSL_SessionDeInit</code> on a 
+				corresponding <code>DSSL_Session</code> object, and then free that object.</li>
+			<li>
+				Finally, destroy the <code>DSSL_Env</code> object when you don’t need it 
+				anymore with <code>DSSL_EnvDestroy</code> call.</li>
+		</ol>
+		<h4>2. TCP reassembly</h4>
+		<p>You are responsible for doing all TCP/IP protocol-related processing. SSL 
+			Decryption Layer API assumes that the input data is properly reassembled TCP 
+			payload.</p>
+		<h4>3. SSL Handshake Protocol Decoding</h4>
+		<p>Each SSL connection starts with establishing a handshake. Handshake protocol is 
+			a part of the SSL/TLS standard. For certain SSL handshake messages 
+			(ClientHello/ServerHello in particular), DSSL API requires that a <b>full</b> such 
+			message is passed to <code>DSSL_SessionProcessData</code> function at a time - 
+			no fragmentation allowed. The best approach is to pass the whole payload of a 
+			single TCP packet at a time. If your application doesn't have access to the TCP 
+			protocol data or for any other reason can't tell where one TCP packet ends and 
+			the next one starts, the best approach is to buffer the data until the 
+			transmission direction changes, i.e. buffer all the data client sends to the 
+			server until the server starts talking and vice versa and then send the 
+			buffered data to <code>DSSL_SessionProcessData</code>.</p>
+		<hr>
+		<small>Copyright &copy; <a href="http://www.atomiclabs.com">Atomic Labs, Inc.</a>, 
+			2005-2009. All rights reserved.</small>
+	</body>
+</html>

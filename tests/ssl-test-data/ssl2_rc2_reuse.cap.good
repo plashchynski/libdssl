@@ -1,0 +1,350 @@
+
+=> New Session: 192.168.1.112:443<->192.168.1.111:49671
+<= Session closing: 192.168.1.112:443<->192.168.1.111:49671
+=> New Session: 192.168.1.112:443<->192.168.1.111:49691
+<= Session closing: 192.168.1.112:443<->192.168.1.111:49691
+=> New Session: 192.168.1.112:443<->192.168.1.111:49694
+C->S:
+GET / HTTP/1.1
+Host: 192.168.1.112
+User-Agent: Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.1.7) Gecko/20091221 Firefox/3.5.7 GTB6
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-us,en;q=0.5
+Accept-Encoding: gzip,deflate
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7
+Keep-Alive: 300
+Connection: keep-alive
+
+
+S->C:
+HTTP/1.0 200 ok
+Content-type: text/html
+
+<HTML><BODY BGCOLOR="#ffffff">
+<pre>
+
+s_server -cert test1.pem -port 443 -www -ssl2 -cipher RC2 
+Ciphers supported in s_server binary
+SSLv2      :EXP-RC2-CBC-MD5          SSLv2      :RC2-CBC-MD5              
+---
+Ciphers common between both SSL end points:
+RC2-CBC-MD5                EXP-RC2-CBC-MD5
+---
+New, SSLv2, Cipher is RC2-CBC-MD5
+SSL-Session:
+    Protocol  : SSLv2
+    Cipher    : RC2-CBC-MD5
+    Session-ID: AB95A6969AECDF7E131DD46CA4590CDB
+    Session-ID-ctx: 01000000
+    Master-Key: 6F8E6B6F08E53C954A597E3E976AABC9
+    Key-Arg   : E1211E4B25D35150
+    Start Time: 1266261118
+    Timeout   : 300 (sec)
+    Verify return code: 0 (ok)
+---
+   4 items in the session cache
+   0 client connects (SSL_connect())
+   0 client renegotiates (SSL_connect())
+   0 client connects that finished
+  58 server accepts (SSL_accept())
+   0 server renegotiates (SSL_accept())
+  13 server accepts that finished
+   9 session cache hits
+   0 session cache misses
+   0 session cache timeouts
+   0 callback cache hits
+   0 cache full overflows (128 allowed)
+---
+no client certificate available
+</BODY></HTML>
+
+
+<= Session closing: 192.168.1.112:443<->192.168.1.111:49694
+=> New Session: 192.168.1.112:443<->192.168.1.111:49696
+C->S:
+GET /favicon.ico HTTP/1.1
+Host: 192.168.1.112
+User-Agent: Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.1.7) Gecko/20091221 Firefox/3.5.7 GTB6
+Accept: image/png,image/*;q=0.8,*/*;q=0.5
+Accept-Language: en-us,en;q=0.5
+Accept-Encoding: gzip,deflate
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7
+Keep-Alive: 300
+Connection: keep-alive
+
+
+S->C:
+HTTP/1.0 200 ok
+Content-type: text/html
+
+<HTML><BODY BGCOLOR="#ffffff">
+<pre>
+
+s_server -cert test1.pem -port 443 -www -ssl2 -cipher RC2 
+Ciphers supported in s_server binary
+SSLv2      :EXP-RC2-CBC-MD5          SSLv2      :RC2-CBC-MD5              
+---
+Ciphers common between both SSL end points:
+RC2-CBC-MD5                EXP-RC2-CBC-MD5
+---
+Reused, SSLv2, Cipher is RC2-CBC-MD5
+SSL-Session:
+    Protocol  : SSLv2
+    Cipher    : RC2-CBC-MD5
+    Session-ID: AB95A6969AECDF7E131DD46CA4590CDB
+    Session-ID-ctx: 01000000
+    Master-Key: 6F8E6B6F08E53C954A597E3E976AABC9
+    Key-Arg   : E1211E4B25D35150
+    Start Time: 1266261118
+    Timeout   : 300 (sec)
+    Verify return code: 0 (ok)
+---
+   4 items in the session cache
+   0 client connects (SSL_connect())
+   0 client renegotiates (SSL_connect())
+   0 client connects that finished
+  59 server accepts (SSL_accept())
+   0 server renegotiates (SSL_accept())
+  14 server accepts that finished
+  10 session cache hits
+   0 session cache misses
+   0 session cache timeouts
+   0 callback cache hits
+   0 cache full overflows (128 allowed)
+---
+no client certificate available
+</BODY></HTML>
+
+
+<= Session closing: 192.168.1.112:443<->192.168.1.111:49696
+=> New Session: 192.168.1.112:443<->192.168.1.111:49698
+C->S:
+GET /favicon.ico HTTP/1.1
+Host: 192.168.1.112
+User-Agent: Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.1.7) Gecko/20091221 Firefox/3.5.7 GTB6
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-us,en;q=0.5
+Accept-Encoding: gzip,deflate
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7
+Keep-Alive: 300
+Connection: keep-alive
+
+
+S->C:
+HTTP/1.0 200 ok
+Content-type: text/html
+
+<HTML><BODY BGCOLOR="#ffffff">
+<pre>
+
+s_server -cert test1.pem -port 443 -www -ssl2 -cipher RC2 
+Ciphers supported in s_server binary
+SSLv2      :EXP-RC2-CBC-MD5          SSLv2      :RC2-CBC-MD5              
+---
+Ciphers common between both SSL end points:
+RC2-CBC-MD5                EXP-RC2-CBC-MD5
+---
+Reused, SSLv2, Cipher is RC2-CBC-MD5
+SSL-Session:
+    Protocol  : SSLv2
+    Cipher    : RC2-CBC-MD5
+    Session-ID: AB95A6969AECDF7E131DD46CA4590CDB
+    Session-ID-ctx: 01000000
+    Master-Key: 6F8E6B6F08E53C954A597E3E976AABC9
+    Key-Arg   : E1211E4B25D35150
+    Start Time: 1266261118
+    Timeout   : 300 (sec)
+    Verify return code: 0 (ok)
+---
+   4 items in the session cache
+   0 client connects (SSL_connect())
+   0 client renegotiates (SSL_connect())
+   0 client connects that finished
+  60 server accepts (SSL_accept())
+   0 server renegotiates (SSL_accept())
+  15 server accepts that finished
+  11 session cache hits
+   0 session cache misses
+   0 session cache timeouts
+   0 callback cache hits
+   0 cache full overflows (128 allowed)
+---
+no client certificate available
+</BODY></HTML>
+
+
+<= Session closing: 192.168.1.112:443<->192.168.1.111:49698
+=> New Session: 192.168.1.112:443<->192.168.1.111:49700
+C->S:
+GET / HTTP/1.1
+Host: 192.168.1.112
+User-Agent: Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.1.7) Gecko/20091221 Firefox/3.5.7 GTB6
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-us,en;q=0.5
+Accept-Encoding: gzip,deflate
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7
+Keep-Alive: 300
+Connection: keep-alive
+Cache-Control: max-age=0
+
+
+S->C:
+HTTP/1.0 200 ok
+Content-type: text/html
+
+<HTML><BODY BGCOLOR="#ffffff">
+<pre>
+
+s_server -cert test1.pem -port 443 -www -ssl2 -cipher RC2 
+Ciphers supported in s_server binary
+SSLv2      :EXP-RC2-CBC-MD5          SSLv2      :RC2-CBC-MD5              
+---
+Ciphers common between both SSL end points:
+RC2-CBC-MD5                EXP-RC2-CBC-MD5
+---
+Reused, SSLv2, Cipher is RC2-CBC-MD5
+SSL-Session:
+    Protocol  : SSLv2
+    Cipher    : RC2-CBC-MD5
+    Session-ID: AB95A6969AECDF7E131DD46CA4590CDB
+    Session-ID-ctx: 01000000
+    Master-Key: 6F8E6B6F08E53C954A597E3E976AABC9
+    Key-Arg   : E1211E4B25D35150
+    Start Time: 1266261118
+    Timeout   : 300 (sec)
+    Verify return code: 0 (ok)
+---
+   4 items in the session cache
+   0 client connects (SSL_connect())
+   0 client renegotiates (SSL_connect())
+   0 client connects that finished
+  61 server accepts (SSL_accept())
+   0 server renegotiates (SSL_accept())
+  16 server accepts that finished
+  12 session cache hits
+   0 session cache misses
+   0 session cache timeouts
+   0 callback cache hits
+   0 cache full overflows (128 allowed)
+---
+no client certificate available
+</BODY></HTML>
+
+
+<= Session closing: 192.168.1.112:443<->192.168.1.111:49700
+=> New Session: 192.168.1.112:443<->192.168.1.111:49702
+C->S:
+GET / HTTP/1.1
+Host: 192.168.1.112
+User-Agent: Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.1.7) Gecko/20091221 Firefox/3.5.7 GTB6
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-us,en;q=0.5
+Accept-Encoding: gzip,deflate
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7
+Keep-Alive: 300
+Connection: keep-alive
+Cache-Control: max-age=0
+
+
+S->C:
+HTTP/1.0 200 ok
+Content-type: text/html
+
+<HTML><BODY BGCOLOR="#ffffff">
+<pre>
+
+s_server -cert test1.pem -port 443 -www -ssl2 -cipher RC2 
+Ciphers supported in s_server binary
+SSLv2      :EXP-RC2-CBC-MD5          SSLv2      :RC2-CBC-MD5              
+---
+Ciphers common between both SSL end points:
+RC2-CBC-MD5                EXP-RC2-CBC-MD5
+---
+Reused, SSLv2, Cipher is RC2-CBC-MD5
+SSL-Session:
+    Protocol  : SSLv2
+    Cipher    : RC2-CBC-MD5
+    Session-ID: AB95A6969AECDF7E131DD46CA4590CDB
+    Session-ID-ctx: 01000000
+    Master-Key: 6F8E6B6F08E53C954A597E3E976AABC9
+    Key-Arg   : E1211E4B25D35150
+    Start Time: 1266261118
+    Timeout   : 300 (sec)
+    Verify return code: 0 (ok)
+---
+   4 items in the session cache
+   0 client connects (SSL_connect())
+   0 client renegotiates (SSL_connect())
+   0 client connects that finished
+  62 server accepts (SSL_accept())
+   0 server renegotiates (SSL_accept())
+  17 server accepts that finished
+  13 session cache hits
+   0 session cache misses
+   0 session cache timeouts
+   0 callback cache hits
+   0 cache full overflows (128 allowed)
+---
+no client certificate available
+</BODY></HTML>
+
+
+<= Session closing: 192.168.1.112:443<->192.168.1.111:49702
+=> New Session: 192.168.1.112:443<->192.168.1.111:49704
+C->S:
+GET / HTTP/1.1
+Host: 192.168.1.112
+User-Agent: Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.1.7) Gecko/20091221 Firefox/3.5.7 GTB6
+Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+Accept-Language: en-us,en;q=0.5
+Accept-Encoding: gzip,deflate
+Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7
+Keep-Alive: 300
+Connection: keep-alive
+Cache-Control: max-age=0
+
+
+S->C:
+HTTP/1.0 200 ok
+Content-type: text/html
+
+<HTML><BODY BGCOLOR="#ffffff">
+<pre>
+
+s_server -cert test1.pem -port 443 -www -ssl2 -cipher RC2 
+Ciphers supported in s_server binary
+SSLv2      :EXP-RC2-CBC-MD5          SSLv2      :RC2-CBC-MD5              
+---
+Ciphers common between both SSL end points:
+RC2-CBC-MD5                EXP-RC2-CBC-MD5
+---
+Reused, SSLv2, Cipher is RC2-CBC-MD5
+SSL-Session:
+    Protocol  : SSLv2
+    Cipher    : RC2-CBC-MD5
+    Session-ID: AB95A6969AECDF7E131DD46CA4590CDB
+    Session-ID-ctx: 01000000
+    Master-Key: 6F8E6B6F08E53C954A597E3E976AABC9
+    Key-Arg   : E1211E4B25D35150
+    Start Time: 1266261118
+    Timeout   : 300 (sec)
+    Verify return code: 0 (ok)
+---
+   4 items in the session cache
+   0 client connects (SSL_connect())
+   0 client renegotiates (SSL_connect())
+   0 client connects that finished
+  63 server accepts (SSL_accept())
+   0 server renegotiates (SSL_accept())
+  18 server accepts that finished
+  14 session cache hits
+   0 session cache misses
+   0 session cache timeouts
+   0 callback cache hits
+   0 cache full overflows (128 allowed)
+---
+no client certificate available
+</BODY></HTML>
+
+
+<= Session closing: 192.168.1.112:443<->192.168.1.111:49704

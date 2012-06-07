@@ -1,0 +1,28 @@
+BODY {
+	margin-left : 8%;
+	margin-right : 5%;
+}
+
+H2 {
+	margin-left : -5%;
+}
+
+H3 {
+	margin-left : -5%;
+}
+
+H4 {
+	margin-left : -2%;
+}
+
+HR
+{
+	margin-left : -5%;
+}
+
+DL {
+	padding-left : 1em;
+}
+DT {
+	font-style:italic
+}

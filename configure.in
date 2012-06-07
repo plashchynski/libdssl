@@ -1,0 +1,62 @@
+
+AC_INIT(src/packet.c)
+AC_CONFIG_AUX_DIR(build)
+AM_INIT_AUTOMAKE(dssl, 2.1.1)
+
+AC_PROG_INSTALL
+
+AC_PROG_CC
+AC_LANG_C
+
+AC_HEADER_STDC
+
+AC_DISABLE_SHARED
+AC_PROG_LIBTOOL
+
+# Define CXXFLAGS before AC_PROG_CXX to suppress the default autoconf
+# compiler options
+CFLAGS="-DDSSL"
+
+# introduce the optional configure parameter for OpenSSL library location
+AC_ARG_WITH(openssl,
+	AC_HELP_STRING(
+	    [--with-openssl=prefix],
+	    [Specify OpenSSL  installation directory. If not set, /usr/local/ssl is used by default]
+	  ),
+	  OPENSSL_PATHSET=1,
+	  OPENSSL_PATHSET=0
+)
+
+# add OpenSSL to include path
+if test  $OPENSSL_PATHSET = 1 ; then
+   	 OPENSSL_PATH=$with_openssl
+else
+	OPENSSL_PATH="/usr/local/ssl"
+fi
+
+CFLAGS="$CFLAGS -I$OPENSSL_PATH/include"
+LDFLAGS="$LDFLAGS -L$OPENSSL_PATH/lib"
+
+AC_CHECK_HEADERS([arpa/inet.h inttypes.h netinet/in.h stdlib.h string.h sys/time.h])
+
+AC_CHECK_HEADER([pcap.h],,[AC_MSG_ERROR([libpcap header file not found. Install libpcap from http://www.tcpdump.org])])
+AC_CHECK_HEADER([zlib.h],,[AC_MSG_ERROR([zlib header file not found. Install zlib from http://www.zlib.net])])
+
+AC_CHECK_HEADER([openssl/ssl.h],,[AC_MSG_ERROR([OpenSSL library header not found. Install OpenSSL from http://www.openssl.org])])
+
+
+AC_ARG_ENABLE(debug,
+[  --enable-debug           Build a debug version of DSSL library ],
+                [ if test -n "$GCC"; then
+                    CFLAGS="$CFLAGS -O0 -D_DEBUG -ggdb"
+                  else
+                    CFLAGS="$CFLAGS -D_DEBUG"
+                  fi
+                ], [CFLAGS="$CFLAGS -O2 -DNDEBUG"] )
+
+LIBS="-lz -lssl -lcrypto -ldl $LIBS"
+
+
+AC_CONFIG_FILES([Makefile src/Makefile samples/Makefile tests/Makefile])
+AC_OUTPUT
+

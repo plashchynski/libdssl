@@ -1,0 +1,30 @@
+BODY {
+	margin-left : 8%;
+	margin-right : 5%;
+}
+
+H1 {
+	margin-bottom : -1em;
+	margin-left : -5%;
+}
+
+H2 {
+	margin-left : -8%;
+	margin-top : 2.7em;
+}
+
+H3 {
+	margin-left : -5%;
+	margin-top : 2em;
+}
+
+DL {
+	padding-left : 1em;
+}
+DT {
+	font-style:italic
+}
+
+DD {
+	margin-bottom: 0.5em;
+}

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="Windows-1252"?>
+<VisualStudioPropertySheet
+	ProjectType="Visual C++"
+	Version="8.00"
+	Name="dssl_third_party_libs_x64"
+	>
+	<UserMacro
+		Name="DSSL_ZLIB_INC"
+		Value="C:\zlib-1.2.3\include"
+	/>
+	<UserMacro
+		Name="DSSL_ZLIB_LIB"
+		Value="C:\zlib-1.2.3\bin\x64"
+	/>
+	<UserMacro
+		Name="DSSL_ZLIB_BIN"
+		Value="C:\zlib-1.2.3\bin\x64"
+	/>
+	<UserMacro
+		Name="DSSL_OPENSSL_INC"
+		Value="C:\openssl-0.9.8l\inc64"
+	/>
+	<UserMacro
+		Name="DSSL_OPENSSL_LIB"
+		Value="C:\openssl-0.9.8l\bin\x64"
+	/>
+	<UserMacro
+		Name="DSSL_PCAP_LIB"
+		Value="C:\WpdPack-4.1.2\Lib\x64"
+	/>
+	<UserMacro
+		Name="DSSL_PCAP_INC"
+		Value="C:\WpdPack-4.1.2\Include\"
+	/>
+	<UserMacro
+		Name="DSSL_PATH"
+		Value="$(DSSL_ZLIB_BIN);$(DSSL_OPENSSL_LIB);$(DSSL_PCAP_LIB)"
+	/>
+</VisualStudioPropertySheet>

@@ -1,0 +1,39 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+	<head>
+		<title>Architecture Overview - DSSL Library Documentation</title>
+		<meta http-equiv="Content-Type" content="text/html;charset=utf-8"/>
+	</head>
+	<body>
+	<h1 align="center">DSSL Library Documentation</h1>
+	<p align="center">Version 1.3.2</p>
+	<h2>DSSL Architecture Overview</h2>
+	<p>DSSL library consists of the following functional parts:</p>
+	<h3>Packet Processing Layer</h3>
+	<p>Packet layer receives captured network packets and process the link (Ethernet) 
+	and network (IP) protocols, detects TCP packets and directs them to the TCP 
+	layer.</p>
+	<h3>TCP layer</h3>
+	<p>TCP layer resolves packet's TCP session object using a table of all active TCP 
+	sessions it maintains. Then, the session packets are sorted and reassembled 
+	into client-to-server and server-to-client TCP streams.</p>
+	<p>When a new chunk of reassembled data becomes available, the TCP layer passes it 
+		to the data callback routine for further processing. For plaintext TCP traffic (no SSL), the output from TCP session reassembly is 
+		headed directly to user-provided callback function for application-level 
+		processing. If SSL encryption is present, the reassembled traffic first passes 
+		through the SSL Decryption layer before it reaches the application.</p>
+	<h3>SSL decryption layer</h3>
+	<p>This module reconstructs the SSL protocol carried over its input TCP payload 
+	data. Then, using SSL server’s private key provided, it decrypts the SSL 
+	payload and passes the decrypted plaintext to the application-defined callback 
+	routine for processing.</p>
+	<p>SSL Decryption layer's design allows it to be used independently from the other 
+		parts of the library. This simplifies the task of adding SSL encryption support 
+		for applications that already have their own TCP reassembly and session 
+		management code.</p>
+	<br>
+	<hr>
+		<small>Copyright &copy; <a href="http://www.atomiclabs.com">Atomic Labs, Inc.</a>, 
+			2005-2009. All rights reserved.</small>
+	</body>
+</html>
