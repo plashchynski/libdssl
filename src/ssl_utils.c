@@ -25,6 +25,9 @@
 #include <openssl/hmac.h>
 #include <openssl/evp.h>
 
+#define MIN(a,b) ((a)>(b))?(b):(a)
+#define MAX(a,b) ((b)>(a))?(b):(a)
+
 /**/
 int ssl3_PRF( const u_char* secret, uint32_t secret_len, 
 		const u_char* random1, uint32_t random1_len,
@@ -69,7 +72,7 @@ int ssl3_PRF( const u_char* secret, uint32_t secret_len,
 }
 
 
-static void tls1_P_hash( const EVP_MD *md, const unsigned char *sec,
+void tls1_P_hash( const EVP_MD *md, const unsigned char *sec,
 						int sec_len, unsigned char *seed, int seed_len,
 						unsigned char *out, int olen)
 {
@@ -115,6 +118,87 @@ static void tls1_P_hash( const EVP_MD *md, const unsigned char *sec,
 	HMAC_CTX_cleanup(&ctx);
 	HMAC_CTX_cleanup(&ctx_tmp);
 	OPENSSL_cleanse(A1,sizeof(A1));
+}
+
+void tls12_P_hash(char *secret,uint32_t secret_len,char *seed,uint32_t seed_len, EVP_MD *md,char *out, uint32_t out_len)
+{
+  char *ptr=out;
+  int left=out_len;
+  int tocpy;
+  char *A;
+  char _A[128],tmp[128];
+  unsigned int A_l,tmp_l;
+  HMAC_CTX hm;
+
+  A=seed;
+  A_l=seed_len;
+
+  while(left){
+    HMAC_Init(&hm,secret,secret_len,md);
+    HMAC_Update(&hm,A,A_l);
+    HMAC_Final(&hm,_A,&A_l);
+    A=_A;
+
+    HMAC_Init(&hm,secret,secret_len,md);
+    HMAC_Update(&hm,A,A_l);
+    HMAC_Update(&hm,seed,seed_len);
+    HMAC_Final(&hm,tmp,&tmp_l);
+
+    tocpy=MIN(left,tmp_l);
+    memcpy(ptr,tmp,tocpy);
+    ptr+=tocpy;
+    left-=tocpy;
+  }
+
+  HMAC_cleanup(&hm);
+}   
+
+int tls12_PRF(char * digest,u_char *secret,uint32_t secret_len,char *label, u_char *rnd1,uint32_t rnd1_len,
+							u_char *rnd2,uint32_t rnd2_len,u_char *out,uint32_t out_len)
+{
+  EVP_MD *md;
+  int _status;
+	uint32_t seed_len;
+  char *ptr;
+  int i;
+	int digestInt;
+  char *sha_out=NULL;
+  char *seed=NULL;
+
+	if( !label || !out || out_len == 0 ) { _ASSERT( FALSE); return NM_ERROR( DSSL_E_INVALID_PARAMETER ); }
+
+	sha_out = (u_char*) malloc( MAX(out_len,64) );
+	if( !sha_out ) return NM_ERROR( DSSL_E_OUT_OF_MEMORY );
+
+	seed_len = (uint32_t)strlen( label ) + rnd1_len + rnd2_len;
+	seed = (u_char*) malloc( seed_len );
+
+	if( !seed ) 
+	{
+		free( sha_out );
+		return NM_ERROR( DSSL_E_OUT_OF_MEMORY );
+	}
+
+  ptr=seed;
+  memcpy(ptr,label,strlen(label)); ptr+=strlen(label);
+  memcpy(ptr,rnd1,rnd1_len); ptr+=rnd1_len;
+  memcpy(ptr,rnd2,rnd2_len); ptr+=rnd2_len;    
+
+  /* Earlier versions of openssl didn't have SHA256 of course... */
+  md=EVP_get_digestbyname(digest);
+	if (md == NULL) {
+      return NM_ERROR(DSSL_E_SSL_INVALID_MAC);
+  }
+  
+	tls12_P_hash(secret,secret_len,seed,seed_len,md,sha_out,out_len);
+
+  for(i=0;i<out_len;i++)
+    out[i]=sha_out[i];
+
+  free( sha_out );
+  free( seed );
+
+	return DSSL_RC_OK;
 }
 
 int tls1_PRF( const u_char* secret, uint32_t secret_len, const char* label, 
@@ -198,4 +282,22 @@ int ssl2_PRF( const u_char* secret, uint32_t secret_len,
 
 	EVP_MD_CTX_cleanup( &ctx );
 	return DSSL_RC_OK;
+}
+
+void DumpDataToLog( u_char* data, uint32_t sz )
+{
+	uint32_t i;
+
+	if (gDsslDebugEnabled)
+	{
+		printf("DumpDataToLog - dump data:");
+
+		for( i = 0; i < sz; i++ )
+		{
+			if( isprint(data[i]) || data[i] == '\n' || data[i] == '\t' || data[i] == '\r' ) 
+				putc( data[i], stdout );
+			else
+				putc( '.', stdout );
+		}
+	}
 }

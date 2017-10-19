@@ -26,6 +26,9 @@
 #endif
 #include "errors.h"
 
+short gDsslDebugInit = 0;
+short gDsslDebugEnabled = 0;
+
 #ifdef _DEBUG
 int NmDebugCatchError( int rc )
 {
@@ -59,4 +62,28 @@ void nmLogMessage( uint32_t category, const char* fmt, ... )
   /*TODO*/
 	category;
 	fmt;
+}
+
+void initializeDsslDebug()
+{
+	char * envParam = getenv("DSSL_EXTRA_DEBUG");
+	gDsslDebugEnabled = 0;
+
+	if (envParam != NULL)
+		gDsslDebugEnabled = atoi(envParam);
+
+	gDsslDebugInit = 1;
+}
+
+short IsDebugEnabled()	
+{
+	short ret = 0;
+
+	if (!gDsslDebugInit)
+		initializeDsslDebug();
+
+	if (gDsslDebugEnabled)
+		ret = 1;
+
+	return ret;
 }

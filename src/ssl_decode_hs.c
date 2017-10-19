@@ -27,8 +27,17 @@
 #include "packet.h"
 
 #ifndef SSL3_MT_NEWSESSION_TICKET
-	#define	SSL3_MT_NEWSESSION_TICKET		4
+	#define	SSL3_MT_NEWSESSION_TICKET       4
 #endif
+
+#ifndef SSL3_MT_CERTIFICATE_STATUS
+	#define SSL3_MT_CERTIFICATE_STATUS      22
+#endif
+
+#ifndef SSL3_MT_NEXT_PROTO
+	#define SSL3_MT_NEXT_PROTO              67
+#endif
+
 
 #ifdef NM_TRACE_SSL_HANDSHAKE
 static const char* SSL3_HandshakeTypeToString( int hs_type )
@@ -38,13 +47,15 @@ static const char* SSL3_HandshakeTypeToString( int hs_type )
 		case SSL3_MT_CLIENT_HELLO: return "ClientHello";
 		case SSL3_MT_SERVER_HELLO: return "ServerHello";
 		case SSL3_MT_NEWSESSION_TICKET: return "NewSessionTicket (unsupported!)";
-		case SSL3_MT_CERTIFICATE: return "Sertificate";
+		case SSL3_MT_CERTIFICATE: return "Certificate";
 		case SSL3_MT_SERVER_KEY_EXCHANGE: return "ServerKeyExchange";
 		case SSL3_MT_CERTIFICATE_REQUEST: return "CertificateRequest";
 		case SSL3_MT_SERVER_DONE: return "ServerHelloDone";
 		case SSL3_MT_CERTIFICATE_VERIFY: return "CertificateVerify";
 		case SSL3_MT_CLIENT_KEY_EXCHANGE: return "ClientKeyExchange";
 		case SSL3_MT_FINISHED: return "Finished";
+		case SSL3_MT_CERTIFICATE_STATUS: return "CertificateStatus";
+		case SSL3_MT_NEXT_PROTO: return "NextProtocol";
 		case DTLS1_MT_HELLO_VERIFY_REQUEST: return "HelloVerifyRequest";
 		default: return "Unknown";
 	}
@@ -74,11 +85,16 @@ static int ssl3_decode_client_hello( DSSL_Session* sess, u_char* data, uint32_t 
 	/* record the handshake start time */
 	sess->handshake_start = sess->last_packet->pcap_header.ts;
 
-	if( data[0] != 3 || data[1] > 1) return NM_ERROR( DSSL_E_SSL_UNKNOWN_VERSION );
+	// recognize SSL version up to TLS 1.2
+	if( data[0] != 3 || data[1] > 3) {
+		printf("ssl3_decode_client_hello - unsupported\n");
+		return NM_ERROR( DSSL_E_SSL_UNKNOWN_VERSION );
+	}
 
 	/* 2 bytes client version */
 	sess->client_version = MAKE_UINT16( data[0], data[1] );
-	ssls_set_session_version( sess, MAKE_UINT16( data[0], data[1] ) );
+	// PION-1157: don't set the SSL version until ServerHello
+	//ssls_set_session_version( sess, MAKE_UINT16( data[0], data[1] ) );
 
 	data+= 2;
 
@@ -173,11 +189,21 @@ static int ssl3_decode_server_hello( DSSL_Session* sess, u_char* data, uint32_t 
 	uint16_t session_id_len = 0;
 	int session_id_match = 0;
 
-	if( data[0] != 3 || data[1] > 1) return NM_ERROR( DSSL_E_SSL_UNKNOWN_VERSION );
+	DEBUG_TRACE0("ssl3_decode_server_hello - start\n");
+
+	// Supporting TLS 1.2
+	if( data[0] != 3 || data[1] > 3) {
+		DEBUG_TRACE0("ssl3_decode_server_hello - unsupported\n");
+		return NM_ERROR( DSSL_E_SSL_UNKNOWN_VERSION );
+	}
+
 	if( len < SSL3_SERVER_HELLO_MIN_LEN ) return NM_ERROR( DSSL_E_SSL_INVALID_RECORD_LENGTH );
 
 	/* Server Version */
 	server_version = MAKE_UINT16( data[0], data[1] );
+
+	DEBUG_TRACE1("ssl3_decode_server_hello - server_version: 0x%02X\n", server_version);
+
 	if( sess->version == 0 || server_version < sess->version )
 	{
 		ssls_set_session_version( sess, server_version );
@@ -195,6 +221,8 @@ static int ssl3_decode_server_hello( DSSL_Session* sess, u_char* data, uint32_t 
 	_ASSERT_STATIC( sizeof(sess->session_id) == 32 );
 	session_id_len = data[0];
 	data++;
+
+	DEBUG_TRACE1("ssl3_decode_server_hello - session_id_len: %d\n", session_id_len);
 
 	if( session_id_len > 0 )
 	{
@@ -227,6 +255,9 @@ static int ssl3_decode_server_hello( DSSL_Session* sess, u_char* data, uint32_t 
 
 	sess->cipher_suite = MAKE_UINT16( data[0], data[1] );
 	sess->compression_method = data[2];
+
+	DEBUG_TRACE1("ssl3_decode_server_hello - cipher_suite: %d\n", sess->cipher_suite);
+	DEBUG_TRACE1("ssl3_decode_server_hello - compression_method: %d\n", sess->compression_method);
 
 	data += 3;
 	sess->flags &= ~SSF_TLS_SERVER_SESSION_TICKET; /* clear server side TLS Session Ticket flag */
@@ -282,6 +313,8 @@ static int ssl3_decode_server_hello( DSSL_Session* sess, u_char* data, uint32_t 
 		if( NM_IS_FAILED( rc ) ) return rc;
 	}
 
+	DEBUG_TRACE0("ssl3_decode_server_hello - end\n");
+
 	return DSSL_RC_OK;
 }
 
@@ -300,7 +333,7 @@ int ssl_decode_first_client_hello( DSSL_Session* sess, u_char* data, uint32_t le
 
 		if( rc == DSSL_RC_OK )
 		{
-			if( sess->version >= SSL3_VERSION && sess->version <= TLS1_VERSION )
+			if( sess->version >= SSL3_VERSION && sess->version <= TLS1_2_VERSION )	// supporting TLS 1.2
 			{
 				ssl3_init_handshake_digests( sess );
 				ssl3_update_handshake_digests( sess, data + hdrLen, recLen );
@@ -332,6 +365,7 @@ int ssl_decode_first_client_hello( DSSL_Session* sess, u_char* data, uint32_t le
 	}
 	else
 	{
+		DEBUG_TRACE0("ssl_decode_first_client_hello - unsupported\n");
 		rc = NM_ERROR( DSSL_E_SSL_UNKNOWN_VERSION );
 	}
 
@@ -355,12 +389,11 @@ int ssl_detect_client_hello_version( u_char* data, uint32_t len, uint16_t* ver )
 		data[1] == SSL3_VERSION_MAJOR && data[5] == SSL3_MT_CLIENT_HELLO )
 	{
 		uint16_t client_hello_ver = MAKE_UINT16( data[9], data[10] );
-		*ver = MAKE_UINT16( data[1], data[2] );
-
-		if( *ver != client_hello_ver ) rc = DSSL_E_SSL_PROTOCOL_ERROR;
+		*ver = client_hello_ver;
 	}
 	else
 	{
+		DEBUG_TRACE0("ssl_detect_client_hello_version - unsupported\n");
 		rc = DSSL_E_SSL_UNKNOWN_VERSION;
 	}
 
@@ -395,6 +428,7 @@ int ssl_detect_server_hello_version( u_char* data, uint32_t len, uint16_t* ver )
 	}
 	else
 	{
+		DEBUG_TRACE0("ssl_detect_server_hello_version - unsupported\n");
 		rc = NM_ERROR( DSSL_E_SSL_UNKNOWN_VERSION );
 	}
 
@@ -410,9 +444,15 @@ int ssl3_decode_client_key_exchange( DSSL_Session* sess, u_char* data, uint32_t 
 	uint32_t org_len = len;
 	int pms_len = 0;
 	int rc = DSSL_RC_OK;
+	int force_key_try = 0;
+	u_char decrypt_buffer[RSA_DECRYPT_BUFFER_SIZE];
+	uint16_t recLen = 0;
 
-	if( sess->version < SSL3_VERSION || sess->version > TLS1_VERSION )
+	DEBUG_TRACE0("ssl3_decode_client_key_exchange - start\n");
+
+	if( sess->version < SSL3_VERSION || sess->version > TLS1_2_VERSION )	// supporting TLS 1.2
 	{
+		DEBUG_TRACE0("ssl3_decode_client_key_exchange - unsupported\n");
 		return NM_ERROR( DSSL_E_SSL_UNKNOWN_VERSION );
 	}
 
@@ -422,7 +462,9 @@ int ssl3_decode_client_key_exchange( DSSL_Session* sess, u_char* data, uint32_t 
 	*/
 	if( sess->version > SSL3_VERSION )
 	{
-		uint16_t recLen = 0;
+		DEBUG_TRACE0("ssl3_decode_client_key_exchange - fix netscape bug\n");
+
+		//uint16_t recLen = 0;
 		if( !IS_ENOUGH_LENGTH( org_data, org_len, data, 2 ) ) 
 		{
 			return NM_ERROR( DSSL_E_SSL_INVALID_RECORD_LENGTH );
@@ -445,43 +487,47 @@ int ssl3_decode_client_key_exchange( DSSL_Session* sess, u_char* data, uint32_t 
 		return NM_ERROR( DSSL_E_SSL_INVALID_RECORD_LENGTH );
 	}
 
-	pk = ssls_get_session_private_key( sess );
+	force_key_try = sess->env->flags & DSSL_ENV_FORCE_TRY_SSL_KEYS;
 
-	/* if SSL server key is not found, try to find a matching one from the key pool */
+	if(!force_key_try)
+		pk = ssls_get_session_private_key( sess );
+	else
+		pk = NULL;
+
+	/* if SSL server key is not found or we need to force the key search,
+		try to find a matching one from the key pool */
 	if(pk == NULL) 
 	{
+		DEBUG_TRACE0("ssl3_decode_client_key_exchange - pk is NULL\n");
+
 		_ASSERT( sess->last_packet);
 		pk = ssls_try_ssl_keys( sess, data, len );
 
-		/* if a matching key found, register it with the server IP:port */
+		/* matching key found, register or store in the session */
 		if(pk != NULL)
 		{
-			if( ssls_register_ssl_key( sess, pk ) == DSSL_RC_OK)
-			{
-				/* ssls_register_ssl_key clones the key, query the key back */
-				pk = ssls_get_session_private_key( sess );
-			}
-			else
-			{
-				pk = NULL;
-			}
+			DEBUG_TRACE0("ssl3_decode_client_key_exchange - pk found.. storing the session\n");
+			ssls_register_ssl_key( sess, pk ); /* register key in the cache */
 		}
 	}
 
 	if(!pk) 
 	{
+		DEBUG_TRACE0("ssl3_decode_client_key_exchange - pk still NULL\n");
 		ssls_register_missing_key_server( sess );
 		return NM_ERROR( DSSL_E_SSL_SERVER_KEY_UNKNOWN );
 	}
 
 	if(pk->type != EVP_PKEY_RSA) return NM_ERROR( DSSL_E_SSL_CANNOT_DECRYPT_NON_RSA );
 
-	pms_len = RSA_private_decrypt( len, data, sess->PMS, pk->pkey.rsa, RSA_PKCS1_PADDING );
+	pms_len = RSA_private_decrypt( len, data, decrypt_buffer, pk->pkey.rsa, RSA_PKCS1_PADDING );
 
 	if( pms_len != SSL_MAX_MASTER_KEY_LENGTH )
 	{
 		return NM_ERROR( DSSL_E_SSL_CORRUPTED_PMS );
 	}
+
+	memcpy(sess->PMS, decrypt_buffer, pms_len);
 
 	if( MAKE_UINT16( sess->PMS[0], sess->PMS[1] ) != sess->client_version )
 	{
@@ -489,6 +535,8 @@ int ssl3_decode_client_key_exchange( DSSL_Session* sess, u_char* data, uint32_t 
 	}
 
 	rc = ssls_decode_master_secret( sess );
+	DEBUG_TRACE1("ssl3_decode_client_key_exchange - ssls_decode_master_secret rc: %d\n", rc);
+
 	OPENSSL_cleanse(sess->PMS, sizeof(sess->PMS) );
 
 	if( rc != DSSL_RC_OK ) return rc;
@@ -498,6 +546,9 @@ int ssl3_decode_client_key_exchange( DSSL_Session* sess, u_char* data, uint32_t 
 	{
 		ssls_store_session( sess );
 	}
+
+	DEBUG_TRACE1("ssl3_decode_client_key_exchange - end. rc: %d\n", rc);
+
 	return rc;
 }
 
@@ -521,11 +572,13 @@ static int ssl3_decode_server_certificate( DSSL_Session* sess, u_char* data, uin
 
 	if( !sess ) return NM_ERROR( DSSL_E_INVALID_PARAMETER );
 
-	//TBD: skip server certificate check if SSL key has not yet been mapped for this server
-	if( !sess->ssl_si ) return DSSL_RC_OK;
+ 	/* note: this will never work when FORCE_TRY_SSL_KEYS is set b/c the private
+ 	   key used by the session is not known until after the certificate is seen */
+	if( (sess->env->flags & DSSL_ENV_FORCE_TRY_SSL_KEYS) || !ssls_get_session_private_key(sess) ) return DSSL_RC_OK;
 
-	if( !sess->ssl_si->pkey ) return NM_ERROR( DSSL_E_UNINITIALIZED_ARGUMENT );
-
+/*
+ * disable certificate checking
+ *
 	if( len < 3 ) return NM_ERROR( DSSL_E_SSL_INVALID_RECORD_LENGTH );
 	
 	llen = MAKE_UINT24( data[0], data[1], data[2] );
@@ -548,6 +601,7 @@ static int ssl3_decode_server_certificate( DSSL_Session* sess, u_char* data, uin
 	}
 
 	if( x ) X509_free( x );
+*/
 
 	return rc;
 }
@@ -594,15 +648,25 @@ int ssl3_decode_handshake_record( dssl_decoder_stack* stack, NM_PacketDir dir,
 	u_char hs_type = 0;
 	u_char* org_data = data;
 	DSSL_Session* sess = stack->sess;
+	int i = 0;
 	_ASSERT( processed != NULL );
 	_ASSERT((sess->flags & SSF_SSLV2_CHALLENGE) == 0);
 
+	DEBUG_TRACE1("ssl_decode_handshake_record - start. version: 0x%02X\n", sess->version);
+
+
 	if( sess->version == 0 )
 	{
-		return ssl_decode_first_client_hello( sess, data, len, processed );
+		rc = ssl_decode_first_client_hello( sess, data, len, processed );
+		DEBUG_TRACE1("ssl_tls_decode_handshake_record - ssl_tls_decode_first_client_hello ret: %d\n", rc);
+		return rc;
 	}
 
-	if( len < SSL3_HANDSHAKE_HEADER_LEN ) return NM_ERROR( DSSL_E_SSL_INVALID_RECORD_LENGTH );
+	if( len < SSL3_HANDSHAKE_HEADER_LEN ) 
+	{
+		DEBUG_TRACE1("ssl_decode_handshake_record - ret DSSL_E_SSL_INVALID_RECORD_LENGTH (-8). len: %d, should not be lower than const: 4\n", len);
+		return NM_ERROR( DSSL_E_SSL_INVALID_RECORD_LENGTH );
+	}
 
 	recLen = (((int32_t)data[1]) << 16) | (((int32_t)data[2]) << 8) | data[3];
 	hs_type = data[0];
@@ -610,47 +674,66 @@ int ssl3_decode_handshake_record( dssl_decoder_stack* stack, NM_PacketDir dir,
 	data += SSL3_HANDSHAKE_HEADER_LEN;
 	len -= SSL3_HANDSHAKE_HEADER_LEN;
 
-	if( len < recLen )return NM_ERROR( DSSL_E_SSL_INVALID_RECORD_LENGTH );
+	DEBUG_TRACE1("ssl_decode_handshake_record - got recLen: %d\n", recLen);
+
+	if( len < recLen )
+	{
+		DEBUG_TRACE2("ssl_decode_handshake_record - ret DSSL_E_SSL_INVALID_RECORD_LENGTH (-8). len: %d, should not be lower than recLen: %d\n", len, recLen);
+		return NM_ERROR( DSSL_E_SSL_INVALID_RECORD_LENGTH );
+	}
 
 #ifdef NM_TRACE_SSL_HANDSHAKE
 	DEBUG_TRACE2( "===>Decoding SSL v3 handshake: %s len: %d...", SSL3_HandshakeTypeToString( hs_type ), (int) recLen );
 #endif
 
+	DEBUG_TRACE1("ssl_decode_handshake_record - type: %d\n", hs_type);
+
 	switch( hs_type )
 	{
 	case SSL3_MT_HELLO_REQUEST:
+		DEBUG_TRACE0("ssl_decode_handshake_record - SSL3_MT_HELLO_REQUEST\n");
 		rc = ssl3_decode_dummy( sess, data, recLen );
 		break;
 
 	case SSL3_MT_CLIENT_HELLO:
+		DEBUG_TRACE0("ssl_decode_handshake_record - SSL3_MT_CLIENT_HELLO\n");
 		rc = ssl3_decode_client_hello( sess, data, recLen );
 		break;
 
 	case SSL3_MT_SERVER_HELLO:
+		DEBUG_TRACE1("ssl_decode_handshake_record - SSL3_MT_SERVER_HELLO. recLen: %d\n", recLen);
 		stack->state = SS_SeenServerHello;
 		rc = ssl3_decode_server_hello( sess, data, recLen );
+		DEBUG_TRACE1("ssl_decode_handshake_record - SSL3_MT_SERVER_HELLO. rc: %d\n", rc);
 		break;
 
 	case SSL3_MT_CERTIFICATE:
+		DEBUG_TRACE0("ssl_decode_handshake_record - SSL3_MT_CERTIFICATE\n");
 		if( dir == ePacketDirFromServer )
 		{
 			rc = ssl3_decode_server_certificate( sess, data, recLen );
+			DEBUG_TRACE1("ssl_decode_handshake_record - ssl3_decode_server_certificate rc: %d\n", rc);
 		}
 		else
 		{
 			rc = ssl3_decode_dummy( sess, data, recLen );
+			DEBUG_TRACE1("ssl_decode_handshake_record - ssl3_decode_dummy rc: %d\n", rc);
 		}
 		break;
 
 	case SSL3_MT_SERVER_DONE:
+		DEBUG_TRACE0("ssl_decode_handshake_record - SSL3_MT_SERVER_DONE\n");
 		rc = ssl3_decode_dummy( sess, data, recLen );
 		break;
 
 	case SSL3_MT_CLIENT_KEY_EXCHANGE:
+		DEBUG_TRACE0("ssl_decode_handshake_record - SSL3_MT_CLIENT_KEY_EXCHANGE\n");
 		rc = ssl3_decode_client_key_exchange( sess, data, recLen );
+		DEBUG_TRACE1("ssl_decode_handshake_record - SSL3_MT_CLIENT_KEY_EXCHANGE - ssl3_decode_client_key_exchange rc: %d\n", rc);
 		break;
 
 	case SSL3_MT_FINISHED:
+		DEBUG_TRACE0("ssl_decode_handshake_record - SSL3_MT_FINISHED\n");
 		rc = (*sess->decode_finished_proc)( sess, dir, data, recLen );
 		if( rc == DSSL_RC_OK ) {
 			stack->state = SS_Established;
@@ -659,25 +742,38 @@ int ssl3_decode_handshake_record( dssl_decoder_stack* stack, NM_PacketDir dir,
 		break;
 
 	case SSL3_MT_SERVER_KEY_EXCHANGE:
+		DEBUG_TRACE0("ssl_decode_handshake_record - SSL3_MT_SERVER_KEY_EXCHANGE\n");
 		/*at this point it is clear that the session is not decryptable due to ephemeral keys usage.*/
 		rc = NM_ERROR( DSSL_E_SSL_CANNOT_DECRYPT_EPHEMERAL );
 		break;
 
 	case SSL3_MT_CERTIFICATE_REQUEST:
+		DEBUG_TRACE0("ssl_decode_handshake_record - SSL3_MT_CERTIFICATE_REQUEST\n");
 		/* TODO: track CertificateRequest- client certificate / certificate verify */
 		rc = ssl3_decode_dummy( sess, data, recLen );
 		break;
 
 	case SSL3_MT_CERTIFICATE_VERIFY:
+		DEBUG_TRACE0("ssl_decode_handshake_record - SSL3_MT_CERTIFICATE_VERIFY\n");
 		/* TODO: track CertificateRequest- client certificate / certificate verify */
 		rc = ssl3_decode_dummy( sess, data, recLen );
 		break;
 
 	case SSL3_MT_NEWSESSION_TICKET:
+		DEBUG_TRACE0("ssl_decode_handshake_record - SSL3_MT_NEWSESSION_TICKET\n");
 		rc = ssl3_decode_new_session_ticket( sess, data, recLen );
 		break;
 
+  case DTLS1_MT_HELLO_VERIFY_REQUEST:
+  case SSL3_MT_CERTIFICATE_STATUS:
+  case SSL3_MT_NEXT_PROTO:
+			DEBUG_TRACE0("ssl_decode_handshake_record - DTLS1_MT_HELLO_VERIFY_REQUEST\n");
+  		/* TODO: not yet supported - try to just ignore for now */
+      rc = ssl3_decode_dummy( sess, data, recLen );
+      break;
+
 	default:
+		DEBUG_TRACE0("ssl_decode_handshake_record - none\n");
 		rc = NM_ERROR( DSSL_E_SSL_PROTOCOL_ERROR );
 		break;
 	}
@@ -708,21 +804,40 @@ int ssl3_decode_handshake_record( dssl_decoder_stack* stack, NM_PacketDir dir,
 	}
 #endif
 
+	DEBUG_TRACE1("ssl_decode_handshake_record - end. rc = %d\n", rc);
+
 	return rc;
 }
 
 void ssls_handshake_done( DSSL_Session* sess )
 {
-	/*  at this point we can safely conclude that the SSL key 
-	is working fine, so clear the 'test key' flag, if set  */
-	if(sess->flags & SSF_TEST_SSL_KEY && sess->c_dec.state == SS_Established 
+	/*
+	Report newly discovered SSL server or
+	(repeatedly) report SSL server if DSSL_ENV_FORCE_TRY_SSL_KEYS option is set
+	*/
+	int force_ssl_key = sess->env->flags & DSSL_ENV_FORCE_TRY_SSL_KEYS;
+	if((sess->flags & SSF_TEST_SSL_KEY || force_ssl_key) && sess->c_dec.state == SS_Established 
 		&& sess->s_dec.state == SS_Established)
 	{
 		sess->flags &= ~SSF_TEST_SSL_KEY;
-		_ASSERT(sess->ssl_si);
-		if(sess->event_callback && sess->ssl_si)
+		if(sess->event_callback)
 		{
-			(*sess->event_callback)( sess->user_data, eSslMappingDiscovered, sess->ssl_si );
+			if(sess->ssl_si == NULL) {
+				struct ip_addr ip_src;
+				/* DSSL_ENV_FORCE_TRY_SSL_KEYS must be set */
+				DSSL_ServerInfo si;
+				_ASSERT(sess->env->flags & DSSL_ENV_FORCE_TRY_SSL_KEYS);
+				/* create a temporary DSSL_ServerInfo and to pass to the event callback*/
+				si.pkey = sess->ssl_pkey;
+				/* last packet is server's FINISHED message, so server is the packet's source */
+				GET_IP_SRC_ST(sess->last_packet->ip_header, &ip_src);
+				ADDR_CPY_ST(&si.server_ip, &ip_src); 
+				si.port = ntohs(sess->last_packet->tcp_header->th_sport);
+				(*sess->event_callback)( sess->user_data, eSslMappingDiscovered, &si );
+			} else { 
+				/* normal SSL key discovery */
+				(*sess->event_callback)( sess->user_data, eSslMappingDiscovered, sess->ssl_si );
+			}
 		}
 	}
 

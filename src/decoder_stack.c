@@ -77,32 +77,67 @@ int sslc_is_decoder_stack_set( dssl_decoder_stack* s)
 }
 
 
-int dssl_decoder_stack_set( dssl_decoder_stack* d, DSSL_Session* sess, uint16_t version )
+int dssl_decoder_stack_set( dssl_decoder_stack* d, DSSL_Session* sess, uint16_t version, 
+						   int is_client )
 {
 	int rc = DSSL_RC_OK;
+	int supported =	1;
 
 	d->sess = NULL;
 
 	switch( version )
 	{
 	case SSL3_VERSION:
+		DEBUG_TRACE0("dssl_decoder_stack_set - SSL 3.0\n");
 	case TLS1_VERSION:
+		DEBUG_TRACE0("dssl_decoder_stack_set - TLS version 1.0\n");
 		dssl_decoder_init( &d->drecord, ssl3_record_layer_decoder, d );
 		dssl_decoder_init( &d->dhandshake, ssl3_decode_handshake_record, d );
 		dssl_decoder_init( &d->dcss, ssl3_change_cipher_spec_decoder, d );
 		dssl_decoder_init( &d->dappdata, ssl_application_data_decoder, d );
 		dssl_decoder_init( &d->dalert, ssl3_alert_decoder, d );
 		break;
-
 	case SSL2_VERSION:
+		DEBUG_TRACE0("dssl_decoder_stack_set - SSL 2.0\n");
 		dssl_decoder_init( &d->drecord, ssl2_record_layer_decoder, d );
 		dssl_decoder_init( &d->dhandshake, ssl2_handshake_record_decode_wrapper, d );
 		dssl_decoder_init( &d->dappdata, ssl_application_data_decoder, d );
 		break;
-
-	default:
-		rc = NM_ERROR( DSSL_E_SSL_UNKNOWN_VERSION );
+	case TLS1_1_VERSION:
+		DEBUG_TRACE0("dssl_decoder_stack_set - TLS version 1.1\n");
+		supported = 0;
 		break;
+	case TLS1_2_VERSION:
+		DEBUG_TRACE0("dssl_decoder_stack_set - TLS version 1.2\n");
+		supported = 0;
+		break;
+	default:
+		DEBUG_TRACE0("dssl_decoder_stack_set - Unknown version\n");
+		rc = NM_ERROR( DSSL_E_SSL_UNKNOWN_VERSION );
+		supported = 0;
+		break;
+	}
+
+	if (!supported)
+	{
+		DEBUG_TRACE1("dssl_decoder_stack_set - version is: 0x%02X\n", version);
+
+		// Although TLS is 1.1 there is a message with 1.2 that should 
+		// not be voided
+		if (version > 300)
+		{
+			DEBUG_TRACE0("dssl_decoder_stack_set - adding support\n");
+			dssl_decoder_init( &d->drecord, ssl3_record_layer_decoder, d );
+			dssl_decoder_init( &d->dhandshake, ssl3_decode_handshake_record, d );
+			dssl_decoder_init( &d->dcss, ssl3_change_cipher_spec_decoder, d );
+			dssl_decoder_init( &d->dappdata, ssl_application_data_decoder, d );
+			dssl_decoder_init( &d->dalert, ssl3_alert_decoder, d );
+		}
+		else
+		{
+			DEBUG_TRACE0("dssl_decoder_stack_set - Unknown version (not identified TLS 1.x\n");
+			rc = NM_ERROR( DSSL_E_SSL_UNKNOWN_VERSION );
+		}
 	}
 
 	if( rc == DSSL_RC_OK ) { d->sess = sess; }
@@ -118,6 +153,8 @@ int dssl_decoder_stack_process( dssl_decoder_stack* stack, NM_PacketDir dir, u_c
 
 int dssl_decoder_stack_flip_cipher( dssl_decoder_stack* stack )
 {
+	DEBUG_TRACE0("dssl_decoder_stack_flip_cipher - start\n");
+
 	/* deinitialize old compression state and cipher, if any */
 	if( stack->compression_method != 0 )
 	{
@@ -141,16 +178,27 @@ int dssl_decoder_stack_flip_cipher( dssl_decoder_stack* stack )
 	/* set new cypher */
 	stack->cipher = stack->cipher_new;
 
+	DEBUG_TRACE1("dssl_decoder_stack_flip_cipher - stack->cipher key len: %d\n", stack->cipher->key_len);
+
 	if(  stack->md_new != NULL && stack->sess && 
 		(stack->sess->version == SSL3_VERSION || stack->sess->version == TLS1_VERSION) )
 	{
+		// TODO: TLS_1_1_VERSION TLS_1_2_VERSION
+		memcpy( stack->mac_key, stack->mac_key_new, EVP_MD_size( stack->md_new ) );
+	}
+	else if(  stack->md_new != NULL && stack->sess )
+	{
+		// Trying same code for TLS 1.x
 		memcpy( stack->mac_key, stack->mac_key_new, EVP_MD_size( stack->md_new ) );
 	}
 
+	DEBUG_TRACE1("dssl_decoder_stack_flip_cipher - cipher is: %d\n", stack->md);
 	stack->md = stack->md_new;
 
 	stack->cipher_new = NULL;
 	stack->md_new = NULL;
+
+	DEBUG_TRACE1("dssl_decoder_stack_flip_cipher - end. new is: %d\n", stack->md);
 
 	return DSSL_RC_OK;
 }

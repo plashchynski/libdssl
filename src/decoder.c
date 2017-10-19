@@ -106,11 +106,18 @@ int dssl_decoder_process( dssl_decoder* d, NM_PacketDir dir, u_char* data, uint3
 	uint32_t processed = 0;
 	int rc = DSSL_RC_OK;
 
-	if( !d->handler ) return NM_ERROR( DSSL_E_NOT_IMPL );
+	DEBUG_TRACE0("dssl_decoder_process - start\n");
 
+	if( !d->handler ) {
+		DEBUG_TRACE0("dssl_decoder_process - DSSL_E_NOT_IMPL\n");
+		return NM_ERROR( DSSL_E_NOT_IMPL );
+	}
+
+	DEBUG_TRACE1("dssl_decoder_process - d->buff_used_len: %d\n", d->buff_used_len);
 	if( d->buff_used_len > 0 ) 
 	{
 		rc = dssl_decoder_add_to_buffer( d, data, len );
+		DEBUG_TRACE1("dssl_decoder_process - dssl_decoder_add_to_buffer ret: %d\n", rc);
 
 		if( rc == DSSL_RC_OK )
 		{
@@ -122,7 +129,11 @@ int dssl_decoder_process( dssl_decoder* d, NM_PacketDir dir, u_char* data, uint3
 	while( rc == DSSL_RC_OK && processed < len )
 	{
 		uint32_t p = 0;
+
+		DEBUG_TRACE2("dssl_decoder_process - processed: %d, len: %d\n", processed, len);
 		rc = d->handler( d->handler_data, dir, data + processed, len - processed, &p );
+		DEBUG_TRACE1("dssl_decoder_process - d->handler ret: %d\n", rc);
+
 		processed += p;
 
 		/* can't be all ok and no data processed */
@@ -134,12 +145,16 @@ int dssl_decoder_process( dssl_decoder* d, NM_PacketDir dir, u_char* data, uint3
 		if( d->buff_used_len > 0 )
 		{
 			rc = dssl_decoder_shift_buffer( d, processed );
+			DEBUG_TRACE1("dssl_decoder_process - dssl_decoder_shift_buffer ret: %d\n", rc);
 		}
 		else if( processed < len )
 		{
 			rc = dssl_decoder_add_to_buffer( d, data + processed, len - processed );
+			DEBUG_TRACE1("dssl_decoder_process - dssl_decoder_add_to_buffer ret: %d\n", rc);
 		}
 	}
+
+	DEBUG_TRACE1("dssl_decoder_process - end. ret: %d\n", rc);
 
 	return rc;
 }

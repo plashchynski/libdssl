@@ -99,8 +99,8 @@ int DSSL_SessionProcessData( DSSL_Session* sess, NM_PacketDir dir, u_char* data,
 	if( !sslc_is_decoder_stack_set( dec ) )
 	{
 		uint16_t ver = 0;
-
-		if( dir == ePacketDirFromClient )
+		int is_client = (dir == ePacketDirFromClient);
+		if( is_client )
 		{
 			rc = ssl_detect_client_hello_version( data, len, &ver );
 		}
@@ -109,16 +109,19 @@ int DSSL_SessionProcessData( DSSL_Session* sess, NM_PacketDir dir, u_char* data,
 			rc = ssl_detect_server_hello_version( data, len, &ver );
 			/* update the client decoder after the server have declared the actual version 
 			of the session */
+			DEBUG_TRACE2("DSSL_SessionProcessData - sess->version: 0x%02X, ver is: 0x%02X\n", sess->version, ver);
 			if( rc == DSSL_RC_OK && sess->version != ver )
 			{
-				rc = dssl_decoder_stack_set( &sess->c_dec, sess, ver );
+				sess->c_dec.version = ver;
+				rc = dssl_decoder_stack_set( &sess->c_dec, sess, ver, 1 );
 			}
 			ssls_set_session_version( sess, ver );
 		}
 
 		if( rc == DSSL_RC_OK ) 
 		{
-			rc = dssl_decoder_stack_set( dec, sess, ver );
+			dec->version = ver;
+			rc = dssl_decoder_stack_set( dec, sess, ver, is_client );
 		}
 	}
 
@@ -146,7 +149,10 @@ int DSSL_SessionProcessData( DSSL_Session* sess, NM_PacketDir dir, u_char* data,
 
 EVP_PKEY* ssls_get_session_private_key( DSSL_Session* sess )
 {
-	if( sess->ssl_si == NULL ) return NULL;
+	/* return ad hoc key if the cached SSL server is null */
+	if( sess->ssl_pkey != NULL || sess->ssl_si == NULL ) 
+		return sess->ssl_pkey;
+
 	return sess->ssl_si->pkey;
 }
 
@@ -166,7 +172,6 @@ static void ssls_convert_v2challenge(DSSL_Session* sess)
 		buff, sess->client_challenge_len);
 
 	sess->flags &= ~SSF_SSLV2_CHALLENGE;
-
 }
 
 int ssls_set_session_version( DSSL_Session* sess, uint16_t ver )
@@ -178,6 +183,7 @@ int ssls_set_session_version( DSSL_Session* sess, uint16_t ver )
 	switch( ver )
 	{
 	case SSL3_VERSION:
+		DEBUG_TRACE0("ssls_set_session_version - SSL3_VERSION\n");
 		sess->decode_finished_proc = ssl3_decode_finished;
 		sess->caclulate_mac_proc  = ssl3_calculate_mac;
 		/* convert SSL v2 CHALLENGE to SSL v3+ CLIENT_RANDOM */
@@ -186,6 +192,7 @@ int ssls_set_session_version( DSSL_Session* sess, uint16_t ver )
 		break;
 
 	case TLS1_VERSION:
+		DEBUG_TRACE0("ssls_set_session_version - TLS1_VERSION\n");
 		sess->decode_finished_proc = tls1_decode_finished;
 		sess->caclulate_mac_proc = tls1_calculate_mac;
 		/* convert SSL v2 CHALLENGE to SSL v3+ CLIENT_RANDOM */
@@ -194,11 +201,22 @@ int ssls_set_session_version( DSSL_Session* sess, uint16_t ver )
 		break;
 
 	case SSL2_VERSION:
+		DEBUG_TRACE0("ssls_set_session_version - SSL2_VERSION\n");
 		sess->decode_finished_proc = NULL;
 		sess->caclulate_mac_proc = ssl2_calculate_mac;
 		break;
 
+	case TLS1_1_VERSION:
+	case TLS1_2_VERSION:
+		DEBUG_TRACE0("ssls_set_session_version - TLS1_X_VERSION\n");
+		sess->decode_finished_proc = tls1_decode_finished;
+		sess->caclulate_mac_proc = tls1_calculate_mac;
+		if(sess->flags & SSF_SSLV2_CHALLENGE) 
+			ssls_convert_v2challenge(sess);
+		break;
+
 	default:
+		DEBUG_TRACE0("ssls_set_session_version - unsupported.. \n");
 		rc = NM_ERROR( DSSL_E_SSL_UNKNOWN_VERSION );
 		break;
 	}
@@ -209,6 +227,9 @@ int ssls_set_session_version( DSSL_Session* sess, uint16_t ver )
 
 int ssls_decode_master_secret( DSSL_Session* sess )
 {
+	EVP_MD *md;
+	DSSL_CipherSuite* suite = NULL;
+
 	switch( sess->version )
 	{
 	case SSL3_VERSION:
@@ -225,7 +246,37 @@ int ssls_decode_master_secret( DSSL_Session* sess )
 					sess->master_secret, sizeof( sess->master_secret ) );
 
 	default:
-		return NM_ERROR( DSSL_E_NOT_IMPL );
+		DEBUG_TRACE1("ssls_decode_master_secret - version: 0x%02X\n", sess->version);
+		if (sess->version == TLS1_1_VERSION) 
+		{
+			DEBUG_TRACE0("ssls_decode_master_secret - supported for 1.1\n");
+
+			return tls1_PRF( sess->PMS, SSL_MAX_MASTER_KEY_LENGTH, 
+					"master secret", 
+					sess->client_random, SSL3_RANDOM_SIZE, 
+					sess->server_random, SSL3_RANDOM_SIZE,
+					sess->master_secret, sizeof( sess->master_secret ) );
+		}
+		else if (sess->version == TLS1_2_VERSION) 
+		{
+			DEBUG_TRACE0("ssls_decode_master_secret - supported for 1.2\n");
+
+			/*
+			suite = DSSL_GetSSL3CipherSuite( sess->cipher_suite );
+			md=EVP_get_digestbyname(suite->digest);
+			*/
+
+			return tls12_PRF( "SHA256"/*suite->digest*/, sess->PMS, SSL_MAX_MASTER_KEY_LENGTH, 
+					"master secret", 
+					sess->client_random, SSL3_RANDOM_SIZE, 
+					sess->server_random, SSL3_RANDOM_SIZE,
+					sess->master_secret, sizeof( sess->master_secret ) );
+		}
+		else
+		{
+			DEBUG_TRACE0("ssls_decode_master_secret - DSSL_E_NOT_IMPL\n");
+			return NM_ERROR( DSSL_E_NOT_IMPL );
+		}
 	}
 }
 
@@ -302,7 +353,17 @@ int ssls_generate_keys( DSSL_Session* sess )
 	}
 
 	suite = DSSL_GetSSL3CipherSuite( sess->cipher_suite );
-	if( !suite ) return NM_ERROR( DSSL_E_SSL_CANNOT_DECRYPT );
+
+	if( !suite ) {
+		DEBUG_TRACE0("ssls_generate_keys - failed to find cipher suite\n");
+		return NM_ERROR( DSSL_E_SSL_CANNOT_DECRYPT );
+	}
+
+	if (suite->enc != NULL && strlen(suite->enc) < 32)
+		strcpy(sess->cipher_encoding, suite->enc);
+
+	if (suite->digest != NULL && strlen(suite->digest) < 32)
+		strcpy(sess->cipher_digest, suite->digest);
 
 	c = EVP_get_cipherbyname( suite->enc );
 	digest = EVP_get_digestbyname( suite->digest );
@@ -323,9 +384,19 @@ int ssls_generate_keys( DSSL_Session* sess )
 	keyblock_len = (wk_len + digest_len + iv_len)*2;
 	if( !keyblock_len ) return DSSL_RC_OK;
 
-	if( sess->version == TLS1_VERSION )
+	if( sess->version == TLS1_VERSION || sess->version == TLS1_1_VERSION)
 	{
+		DEBUG_TRACE0("ssls_generate_keys - calling tls1_PRF\n");
 		rc = tls1_PRF( sess->master_secret, sizeof( sess->master_secret ), 
+					"key expansion", 
+					sess->server_random, SSL3_RANDOM_SIZE,
+					sess->client_random, SSL3_RANDOM_SIZE,
+					keyblock, keyblock_len );
+	}
+	else if( sess->version == TLS1_2_VERSION)
+	{
+		DEBUG_TRACE0("ssls_generate_keys - calling tls12_PRF\n");
+		rc = tls12_PRF( "SHA256"/*sess->cipher_digest*/, sess->master_secret, sizeof( sess->master_secret ), 
 					"key expansion", 
 					sess->server_random, SSL3_RANDOM_SIZE,
 					sess->client_random, SSL3_RANDOM_SIZE,
@@ -333,6 +404,7 @@ int ssls_generate_keys( DSSL_Session* sess )
 	}
 	else
 	{
+		DEBUG_TRACE0("ssls_generate_keys - calling ssl3_PRF\n");
 		rc = ssl3_PRF( sess->master_secret, sizeof( sess->master_secret ),
 					sess->server_random, SSL3_RANDOM_SIZE,
 					sess->client_random, SSL3_RANDOM_SIZE,
@@ -359,8 +431,11 @@ int ssls_generate_keys( DSSL_Session* sess )
 			if( DSSL_CipherSuiteExportable( suite ) )
 			{
 				int final_wk_len =  EVP_CIPHER_key_length( c );
-				if( sess->version == TLS1_VERSION )
+
+				if( sess->version == TLS1_VERSION || sess->version == TLS1_1_VERSION )
 				{
+					DEBUG_TRACE0("ssls_generate_keys - calling tls1_PRF (2)\n");
+
 					tls1_PRF( c_wk, wk_len, "client write key", 
 							sess->client_random, SSL3_RANDOM_SIZE,
 							sess->server_random, SSL3_RANDOM_SIZE,
@@ -371,9 +446,24 @@ int ssls_generate_keys( DSSL_Session* sess )
 							sess->server_random, SSL3_RANDOM_SIZE,
 							export_s_wk, final_wk_len );
 				}
+				else if( sess->version == TLS1_2_VERSION)
+				{
+					DEBUG_TRACE1("ssls_generate_keys - calling tls12_PRF (2) - sess->cipher_digest: %s\n", sess->cipher_digest);
+
+					tls12_PRF( "SHA256"/*sess->cipher_digest*/,c_wk, wk_len, "client write key", 
+							sess->client_random, SSL3_RANDOM_SIZE,
+							sess->server_random, SSL3_RANDOM_SIZE,
+							export_c_wk, final_wk_len );
+					
+					tls12_PRF( "SHA256"/*sess->cipher_digest*/,s_wk, wk_len, "server write key", 
+							sess->client_random, SSL3_RANDOM_SIZE,
+							sess->server_random, SSL3_RANDOM_SIZE,
+							export_s_wk, final_wk_len );
+				}
 				else
 				{
 					MD5_CTX md5;
+					DEBUG_TRACE0("ssls_generate_keys - MD5_CTX handling\n");
 
 					_ASSERT( sess->version == SSL3_VERSION );
 					MD5_Init( &md5 );
@@ -399,9 +489,20 @@ int ssls_generate_keys( DSSL_Session* sess )
 		{
 			if( DSSL_CipherSuiteExportable( suite ) )
 			{
-				if( sess->version == TLS1_VERSION )
+				if( sess->version == TLS1_VERSION || sess->version == TLS1_1_VERSION )
 				{
+					DEBUG_TRACE0("ssls_generate_keys - calling tls1_PRF (3)\n");
+
 					tls1_PRF( NULL, 0, "IV block",
+							sess->client_random, SSL3_RANDOM_SIZE, 
+							sess->server_random, SSL3_RANDOM_SIZE,
+							export_iv_block, iv_len*2 );
+				}
+				else if( sess->version == TLS1_2_VERSION)
+				{
+					DEBUG_TRACE1("ssls_generate_keys - calling tls12_PRF (3) - sess->cipher_digest: %s\n", sess->cipher_digest);
+
+					tls12_PRF( "SHA256"/*sess->cipher_digest*/, NULL, 0, "IV block",
 							sess->client_random, SSL3_RANDOM_SIZE, 
 							sess->server_random, SSL3_RANDOM_SIZE,
 							export_iv_block, iv_len*2 );
@@ -409,6 +510,7 @@ int ssls_generate_keys( DSSL_Session* sess )
 				else
 				{
 					MD5_CTX md5;
+					DEBUG_TRACE0("ssls_generate_keys - MD5_CTX handling (2)\n");
 
 					_ASSERT( sess->version == SSL3_VERSION );
 
@@ -452,11 +554,17 @@ int ssls_generate_keys( DSSL_Session* sess )
 	/* init ciphers */
 	if( c != NULL && rc == DSSL_RC_OK )
 	{
+		DEBUG_TRACE0("ssls_generate_keys - EVP_CIPHER_CTX_init\n");
+
 		EVP_CIPHER_CTX_init( c_cipher );
 		EVP_CipherInit( c_cipher, c, c_wk, c_iv, 0 );
 
 		EVP_CIPHER_CTX_init( s_cipher );
 		EVP_CipherInit( s_cipher, c, s_wk, s_iv, 0 );
+	}
+	else
+	{
+		DEBUG_TRACE0("ssls_generate_keys - not calling EVP_CIPHER_CTX_init\n");
 	}
 
 	/* set session data */
@@ -470,6 +578,7 @@ int ssls_generate_keys( DSSL_Session* sess )
 
 		if( digest )
 		{
+			DEBUG_TRACE1("ssls_generate_keys - identified digest. len: %d\n", digest_len);
 			_ASSERT( EVP_MD_size( digest ) == (int)digest_len );
 			sess->c_dec.md_new = digest;
 			sess->s_dec.md_new = digest;
@@ -703,7 +812,7 @@ EVP_PKEY* ssls_try_ssl_keys( DSSL_Session* sess, u_char* data, uint32_t len)
 	DSSL_Env* env = NULL;
 	int i = 0;
 	EVP_PKEY *pk = NULL;
-	u_char	pms_buff[1024];
+	u_char	pms_buff[RSA_DECRYPT_BUFFER_SIZE];
 	_ASSERT(sess);
 
 	env = sess->env;
@@ -745,27 +854,48 @@ static EVP_PKEY* ssls_dup_PrivateRSA_ENV_PKEY( EVP_PKEY* src )
 
 int ssls_register_ssl_key( DSSL_Session* sess,EVP_PKEY* pk )
 {
-	struct in_addr server_ip = sess->last_packet->ip_header->ip_dst;
+	struct ip_addr server_ip;
 	uint16_t server_port = ntohs(sess->last_packet->tcp_header->th_dport);
-	EVP_PKEY* dup_key = ssls_dup_PrivateRSA_ENV_PKEY( pk );
 	int rc = DSSL_RC_OK;
+	int bAddToCache = 1;
 
-#if !defined(__APPLE__)
-	/* MacOS uses OpenSSL v 0.9.7 that doesn't have EVP_PKEY_cmp */
-	_ASSERT( EVP_PKEY_cmp(pk, dup_key) == 1);
-#endif
-
-	rc = DSSL_EnvSetServerInfoWithKey(sess->env, &server_ip, server_port, dup_key);
-	if( rc == DSSL_RC_OK)
+	GET_IP_DST_ST(sess->last_packet->ip_header, &server_ip);
+	/* check if need to add the server to the cache */
+	if( sess->env->flags & DSSL_ENV_FORCE_TRY_SSL_KEYS )
 	{
-		sess->flags |= SSF_TEST_SSL_KEY; /* set a flag to watch this key until it's proven to work */
-		sess->ssl_si = DSSL_EnvFindServerInfo( sess->env, server_ip, server_port);
-		_ASSERT(sess->ssl_si);
+		/* only dup the key and add if the server is not already in the cache */
+		bAddToCache = (DSSL_EnvFindServerInfo(sess->env, &server_ip, server_port) == NULL);
 	}
-	else
+
+	if( bAddToCache )
 	{
-		EVP_PKEY_free(dup_key);
-		dup_key = NULL;
+		EVP_PKEY* dup_key = ssls_dup_PrivateRSA_ENV_PKEY( pk );
+	#if !defined(__APPLE__)
+		/* MacOS uses OpenSSL v 0.9.7 that doesn't have EVP_PKEY_cmp */
+		_ASSERT( EVP_PKEY_cmp(pk, dup_key) == 1);
+	#endif
+
+		rc = DSSL_EnvSetServerInfoWithKey(sess->env, &server_ip, server_port, dup_key);
+		dup_key = NULL; /*DSSL_EnvSetServerInfoWithKey is now managing dup_key data */
+	}
+
+	if(rc == DSSL_RC_OK)
+	{
+		if(sess->env->flags & DSSL_ENV_FORCE_TRY_SSL_KEYS)
+		{
+			/* don't use the cached value if "force" flag is set 
+				because it may be a wrong key due to load balancer
+				(multiple SSL servers at a single IP:port) */
+			sess->ssl_pkey = pk;
+		}
+		else
+		{
+			 /* set a flag to watch this key until it's proven to work */
+			sess->flags |= SSF_TEST_SSL_KEY;
+			/* query the cached server info back and store in the session */
+			sess->ssl_si = DSSL_EnvFindServerInfo( sess->env, &server_ip, server_port);
+			_ASSERT(sess->ssl_si);
+		}
 	}
 
 	return rc;
@@ -773,19 +903,20 @@ int ssls_register_ssl_key( DSSL_Session* sess,EVP_PKEY* pk )
 
 void ssls_register_missing_key_server(DSSL_Session* sess)
 {
-	struct in_addr server_ip = sess->last_packet->ip_header->ip_dst;
+	struct ip_addr server_ip;
 	uint16_t server_port = ntohs(sess->last_packet->tcp_header->th_dport);
 
 	_ASSERT( sess );
 	_ASSERT( sess->env );
 
-	if(DSSL_EnvIsMissingKeyServer( sess->env, server_ip, server_port) == NULL )
+	GET_IP_DST_ST(sess->last_packet->ip_header, &server_ip);
+	if( DSSL_EnvIsMissingKeyServer( sess->env, &server_ip, server_port) == NULL )
 	{
-		DSSL_EnvAddMissingKeyServer( sess->env, server_ip, server_port );
+		DSSL_EnvAddMissingKeyServer( sess->env, &server_ip, server_port );
 
 		if(sess->event_callback)
 		{
-			DSSL_ServerInfo* si = DSSL_EnvIsMissingKeyServer( sess->env, server_ip, server_port);
+			DSSL_ServerInfo* si = DSSL_EnvIsMissingKeyServer( sess->env, &server_ip, server_port);
 			_ASSERT(si);
 			(*sess->event_callback)( sess->user_data, eSslMissingServerKey, si );
 		}

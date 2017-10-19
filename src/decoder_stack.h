@@ -64,6 +64,8 @@ struct dssl_decoder_stack_
 	char			compression_method_new;
 	void*			compression_data_new;
 
+	int16_t		version;
+
 	DSSL_Session*	sess;
 };
 
@@ -74,7 +76,7 @@ int dssl_decoder_stack_process( dssl_decoder_stack* stack, NM_PacketDir dir, u_c
 
 int sslc_is_decoder_stack_set( dssl_decoder_stack* s );
 
-int dssl_decoder_stack_set( dssl_decoder_stack* s, DSSL_Session* sess, uint16_t version );
+int dssl_decoder_stack_set( dssl_decoder_stack* s, DSSL_Session* sess, uint16_t version, int is_client );
 
 /* set the newly negotiated cipher current */
 int dssl_decoder_stack_flip_cipher( dssl_decoder_stack* s );

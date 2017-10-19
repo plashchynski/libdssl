@@ -58,12 +58,47 @@ void nmLogMessage( uint32_t category, const char* fmt, ... );
 	#define NM_ENABLE_TRACE
 #endif
 
-#ifdef NM_ENABLE_TRACE
-	#define DEBUG_TRACE0( fmt ) printf( fmt )
-	#define DEBUG_TRACE1( fmt, p1 ) printf( fmt, p1 )
-	#define DEBUG_TRACE2( fmt, p1, p2 ) printf( fmt, p1, p2 )
-	#define DEBUG_TRACE3( fmt, p1, p2, p3 ) printf( fmt, p1, p2, p3 )
-	#define DEBUG_TRACE4( fmt, p1, p2, p3, p4 ) printf( fmt, p1, p2, p3, p4 )
+#ifdef  __cplusplus
+extern "C" {
+#endif
+
+extern short gDsslDebugEnabled;
+extern short gDsslDebugInit;
+
+void initializeDsslDebug();
+short IsDebugEnabled();	
+
+#ifdef  __cplusplus
+}
+#endif
+
+//#ifdef NM_ENABLE_TRACE
+	#define DEBUG_TRACE0( fmt )			\
+		if (!gDsslDebugInit)				\
+			initializeDsslDebug();		\
+		if (gDsslDebugEnabled)			\
+			printf( fmt );
+	#define DEBUG_TRACE1( fmt, p1 ) \
+		if (!gDsslDebugInit)				\
+			initializeDsslDebug();		\
+		if (gDsslDebugEnabled)			\
+			printf( fmt, p1 );
+	#define DEBUG_TRACE2( fmt, p1, p2 ) \
+		if (!gDsslDebugInit)				\
+			initializeDsslDebug();		\
+		if (gDsslDebugEnabled)			\
+			printf( fmt, p1, p2 );
+	#define DEBUG_TRACE3( fmt, p1, p2, p3 ) \
+		if (!gDsslDebugInit)				\
+			initializeDsslDebug();		\
+		if (gDsslDebugEnabled)			\
+			printf( fmt, p1, p2, p3 );
+	#define DEBUG_TRACE4( fmt, p1, p2, p3, p4 ) \
+		if (!gDsslDebugInit)				\
+			initializeDsslDebug();		\
+		if (gDsslDebugEnabled)			\
+			printf( fmt, p1, p2, p3, p4 );
+/*
 #else
 	#define DEBUG_TRACE0( fmt )
 	#define DEBUG_TRACE1( fmt, p1 ) 
@@ -71,5 +106,6 @@ void nmLogMessage( uint32_t category, const char* fmt, ... );
 	#define DEBUG_TRACE3( fmt, p1, p2, p3 )
 	#define DEBUG_TRACE4( fmt, p1, p2, p3, p4 )
 #endif
+*/
 
 #endif

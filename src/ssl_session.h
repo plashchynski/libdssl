@@ -64,9 +64,14 @@ struct DSSL_Session_
 	u_char				session_id[DSSL_SESSION_ID_SIZE];
 	uint32_t			flags;
 	
-	DSSL_ServerInfo*	ssl_si;
+	DSSL_ServerInfo*	ssl_si;	/* pointer to a cached SSL server info */
+	EVP_PKEY*			ssl_pkey; /* pointer to an ad hoc SSL key when key caching is disabled */
+
 
 	uint16_t			cipher_suite;
+	char					cipher_encoding[32];
+	char					cipher_digest[32];
+
 	uint16_t			ssl2_key_arg_len;
 
 	u_char				compression_method;
