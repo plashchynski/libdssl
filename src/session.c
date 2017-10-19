@@ -31,33 +31,91 @@ static int OnNewSSLPacket( TcpStream* stream, DSSL_Pkt* pkt );
 static void SessionInitDecoders( TcpSession* sess, DSSL_Pkt* pkt );
 static int DetectSessionTypeCallback(struct _TcpStream* stream, DSSL_Pkt* pkt );
 
-void AddressToString( uint32_t ip_addr, uint16_t port, char* buff )
+/*
+ * Output format:
+ * IPv4:  ddd.ddd.ddd.ddd 
+ * IPv6:  XXXX:XXXX:XXXX:XXXX:XXXX:XXXX:XXXX:XXXX 
+ */
+void IpAddressToString( const struct ip_addr *ipaddr, char* buff )
 {
-	uint32_t ip = ntohl(ip_addr);
-	sprintf( buff, "%d.%d.%d.%d:%d",
-		((ip >> 24)), ((ip >> 16) & 0xFF),
-		((ip >> 8) & 0xFF), (ip & 0xFF),
-		(int) port );
+	const uint8_t *b;
+
+	if (ADDR_IS_IPV4(ipaddr))
+	{
+		b = ipaddr->addr.a4b;
+		sprintf(buff, "%u.%u.%u.%u", b[0], b[1], b[2], b[3]);
+	} 
+	else if (ADDR_IS_IPV6(ipaddr))
+	{
+		b = ipaddr->addr.a6.s6_addr;
+		sprintf(buff,	
+			"%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X:%02X%02X",
+			b[0], b[1], b[2], b[3],    b[4], b[5], b[6], b[7], 
+			b[8], b[9], b[10], b[11],  b[12], b[13], b[14], b[15]);
+	} else 
+	{
+		strcpy(buff, "<invalid IP adrress type>");
+	}
+}
+
+/*
+ * Output format:
+ * IPv4:  ddd.ddd.ddd.ddd:port 
+ * IPv6: [XXXX:XXXX:XXXX:XXXX:XXXX:XXXX:XXXX:XXXX]:port 
+ */
+void AddressToString( const struct ip_addr *ipaddr, uint16_t port, char* buff )
+{
+	char *buff_p = buff;
+	
+	if (ADDR_IS_IPV6(ipaddr))
+	{
+		buff_p[0] = '[';
+		buff_p++;
+	}
+	IpAddressToString(ipaddr, buff_p);
+	buff_p += strlen(buff_p);
+	if (ADDR_IS_IPV6(ipaddr))
+	{
+		buff_p[0] = ']';
+		buff_p++;
+	}
+	sprintf(buff_p, ":%u", port);
 }
 
 const char* SessionToString( TcpSession* sess, char* buff )
 {
-	char addr1[32], addr2[32];
+	char addr1[DSSL_MAX_IP_ADDR_STR_SIZE], addr2[DSSL_MAX_IP_ADDR_STR_SIZE];
 
 	addr1[0] = 0;
 	addr2[0] = 0;
 
-	AddressToString( sess->serverStream.ip_addr, sess->serverStream.port, addr1 );
-	AddressToString( sess->clientStream.ip_addr, sess->clientStream.port, addr2 );
+	AddressToString( &sess->serverStream.ip_addr, sess->serverStream.port, addr1 );
+	AddressToString( &sess->clientStream.ip_addr, sess->clientStream.port, addr2 );
 
 	sprintf( buff, "%s<->%s", addr1, addr2 );
 	return buff;
 }
 
+const char* StreamToString( const TcpStream* str )
+{
+	static char buff[512];
+	char addr1[DSSL_MAX_IP_ADDR_STR_SIZE], addr2[DSSL_MAX_IP_ADDR_STR_SIZE];
+
+	addr1[0] = 0;
+	addr2[0] = 0;
+
+	AddressToString( &str->ip_addr, str->port, addr1 );
+	AddressToString( &StreamGetPeer(str)->ip_addr, StreamGetPeer(str)->port, addr2 );
+
+	sprintf( buff, "%s->%s", addr1, addr2 );
+
+	return buff;
+}
+
 NM_PacketDir SessionGetPacketDirection( const TcpSession* sess,  const DSSL_Pkt* pkt)
 {
-	uint32_t ip1, ip2;
-	uint16_t port1, port2;
+	struct ip_addr	ip_src, ip_dst;
+	uint16_t port_src, port_dst;
 
 	_ASSERT( sess );
 	_ASSERT( pkt );
@@ -65,19 +123,21 @@ NM_PacketDir SessionGetPacketDirection( const TcpSession* sess,  const DSSL_Pkt*
 	_ASSERT( pkt->ip_header );
 	_ASSERT( pkt->tcp_header );
 
-	ip1 = INADDR_IP( pkt->ip_header->ip_src );
-	ip2 = INADDR_IP( pkt->ip_header->ip_dst );
+	GET_IP_SRC_ST(pkt->ip_header, &ip_src);
+	GET_IP_DST_ST(pkt->ip_header, &ip_dst);
 
-	port1 = PKT_TCP_SPORT( pkt );
-	port2 = PKT_TCP_DPORT( pkt );
+	port_src = PKT_TCP_SPORT( pkt );
+	port_dst = PKT_TCP_DPORT( pkt );
 
-	if( sess->clientStream.ip_addr == ip1 && sess->serverStream.ip_addr == ip2 && 
-		sess->clientStream.port == port1 && sess->serverStream.port == port2 )
+	if( sess->clientStream.port == port_src && sess->serverStream.port == port_dst && 
+		!ADDR_CMP_ST(&sess->clientStream.ip_addr, &ip_src) && 
+		!ADDR_CMP_ST(&sess->serverStream.ip_addr, &ip_dst) )
 	{
 		return ePacketDirFromClient;
 	} 
-	else if( sess->clientStream.ip_addr == ip2 && sess->serverStream.ip_addr == ip1 &&
-			sess->clientStream.port == port2 && sess->serverStream.port == port1 )
+	else if( sess->clientStream.port == port_dst && sess->serverStream.port == port_src && 
+		     !ADDR_CMP_ST(&sess->clientStream.ip_addr, &ip_dst) && 
+    		 !ADDR_CMP_ST(&sess->serverStream.ip_addr, &ip_src) )
 	{
 		return ePacketDirFromServer;
 	}
@@ -91,6 +151,8 @@ NM_PacketDir SessionGetPacketDirection( const TcpSession* sess,  const DSSL_Pkt*
 int SessionInit( CapEnv* env, TcpSession* sess, DSSL_Pkt* pkt, NM_SessionType s_type )
 {
 	int is_server = 0;
+	struct ip_addr ip_dst, ip_src;
+
 	_ASSERT( pkt );
 
 	/* zero init first */
@@ -100,49 +162,70 @@ int SessionInit( CapEnv* env, TcpSession* sess, DSSL_Pkt* pkt, NM_SessionType s_
 	TouchSession(sess);
 
 	sess->type = s_type;
-	if( s_type != eSessionTypeSSL && s_type != eSessionTypeTcp
-		&& s_type != eSessionTypeTBD ) return NM_ERROR( DSSL_E_INVALID_PARAMETER );
-
+	if( s_type != eSessionTypeSSL && s_type != eSessionTypeTcp && s_type != eSessionTypeTBD ) 
+		return NM_ERROR( DSSL_E_INVALID_PARAMETER );
+	
 	sess->env = env;
+	GET_IP_SRC_ST(pkt->ip_header, &ip_src);
+	GET_IP_DST_ST(pkt->ip_header, &ip_dst);
 
 	/* init session's TCP streams */
 	switch( pkt->tcp_header->th_flags & ~(TH_ECNECHO | TH_CWR) )
 	{
 	case TH_SYN:
-		StreamInit( &sess->clientStream, sess,
-			INADDR_IP( pkt->ip_header->ip_src ), PKT_TCP_SPORT( pkt ) );
-		StreamInit( &sess->serverStream, sess, 
-			INADDR_IP( pkt->ip_header->ip_dst ), PKT_TCP_DPORT( pkt ) );
+		StreamInit( &sess->clientStream, sess, &ip_src, PKT_TCP_SPORT( pkt ) );
+		StreamInit( &sess->serverStream, sess, &ip_dst, PKT_TCP_DPORT( pkt ) );
 
 		is_server = 0;
 		break;
 
 	case TH_SYN | TH_ACK:
-		StreamInit( &sess->serverStream, sess, 
-			INADDR_IP( pkt->ip_header->ip_src ), PKT_TCP_SPORT( pkt ) );
-		StreamInit( &sess->clientStream, sess,
-			INADDR_IP( pkt->ip_header->ip_dst ), PKT_TCP_DPORT( pkt ) );
+		StreamInit( &sess->serverStream, sess, &ip_src, PKT_TCP_SPORT( pkt ) );
+		StreamInit( &sess->clientStream, sess, &ip_dst, PKT_TCP_DPORT( pkt ) );
 
 		is_server = 1;
 		break;
 
 	default:
-		StreamInit( &sess->serverStream, sess, 
-			INADDR_IP( pkt->ip_header->ip_src ), PKT_TCP_SPORT( pkt ) );
-		StreamInit( &sess->clientStream, sess, 
-			INADDR_IP( pkt->ip_header->ip_dst ), PKT_TCP_DPORT( pkt ) );
-
-		/* 
-		This connection has already been established. Can't reassemble the SSL session from the middle,
-		hence ignore this session.
-		*/
-		if( sess->type == eSessionTypeSSL ) 
 		{
-#ifdef NM_TRACE_SSL_SESSIONS
-			char _trace_buff[1024];
-			DEBUG_TRACE1( "\n==>Can't reassemble the SSL session from the middle, dropping: ", SessionToString(sess, _trace_buff) );
-#endif
-			sess->type = eSessionTypeNull;
+			/* 
+			This connection has already been established. Can't reassemble the SSL session from the middle,
+			hence ignore this session.
+			*/
+			if( sess->type == eSessionTypeSSL ) 
+			{
+			#ifdef NM_TRACE_SSL_SESSIONS
+				char _trace_buff[1024];
+				DEBUG_TRACE1( "\n==>Can't reassemble the SSL session from the middle, dropping: %s", 
+					SessionToString(sess, _trace_buff) );
+			#endif
+				sess->type = eSessionTypeNull;
+			} else if( sess->type == eSessionTypeTcp ) {
+				NM_PacketDir dir = CapEnvIsKnownTcpServerPacket( env, pkt );
+				int mid_stream = pkt->tcp_header->th_flags & TH_SYN ? 0 : 1; /* start capturing in the middle?*/
+
+				if( dir == ePacketDirInvalid ) {
+				#ifdef NM_TRACE_TCP_SESSIONS
+					char _trace_buff[1024];
+					DEBUG_TRACE1( "\n==>Established TCP session - server not in the TCP server list; dropping: %s", 
+						SessionToString(sess, _trace_buff) );
+					sess->type = eSessionTypeNull;
+				#endif
+					sess->type = eSessionTypeNull;
+				} else if( dir == ePacketDirFromClient ) {
+					StreamInit( &sess->clientStream, sess, &ip_src, PKT_TCP_SPORT( pkt ) );
+					StreamInit( &sess->serverStream, sess, &ip_dst, PKT_TCP_DPORT( pkt ) );
+
+				} else if( dir == ePacketDirFromServer ) {
+					StreamInit( &sess->serverStream, sess, &ip_src, PKT_TCP_SPORT( pkt ) );
+					StreamInit( &sess->clientStream, sess, &ip_dst, PKT_TCP_DPORT( pkt ) );
+				}
+
+				if(sess->type != eSessionTypeNull && mid_stream ) {
+					sess->serverStream.flags |= DSSL_TCPSTREAM_NO_SYN;
+					sess->clientStream.flags |= DSSL_TCPSTREAM_NO_SYN;
+				}
+			}
 		}
 		break;
 	}
@@ -157,6 +240,8 @@ int SessionInit( CapEnv* env, TcpSession* sess, DSSL_Pkt* pkt, NM_SessionType s_
 static void SessionInitDecoders( TcpSession* sess, DSSL_Pkt* pkt )
 {
 	CapEnv* env = NULL;
+	struct ip_addr ip_dst, ip_src;
+
 	_ASSERT(sess && sess->env);
 	env = sess->env;
 
@@ -174,10 +259,11 @@ static void SessionInitDecoders( TcpSession* sess, DSSL_Pkt* pkt )
 		/* create SSL session */
 		if( env->ssl_env != NULL ) 
 		{
+			GET_IP_DST_ST(pkt->ip_header, &ip_dst);
+			GET_IP_SRC_ST(pkt->ip_header, &ip_src);
 			/* first try dst IP:port as the server address */
-			sess->ssl_session = DSSL_EnvCreateSession( env->ssl_env, 
-					pkt->ip_header->ip_dst, PKT_TCP_DPORT( pkt ),
-					pkt->ip_header->ip_src, PKT_TCP_SPORT( pkt ));
+			sess->ssl_session = DSSL_EnvCreateSession( env->ssl_env,
+				&ip_dst, PKT_TCP_DPORT( pkt ), &ip_src, PKT_TCP_SPORT( pkt ) );
 		}
 		else
 		{
@@ -444,6 +530,8 @@ static int OnNewSSLPacket( struct _TcpStream* stream, DSSL_Pkt* pkt )
 		return NM_ERROR( DSSL_E_UNSPECIFIED_ERROR );
 	}
 
+	DEBUG_TRACE0("OnNewSSLPacket - start\n");
+
 	ssl_sess->last_packet = pkt;
 	data = PKT_TCP_PAYLOAD( pkt );
 	len = pkt->data_len;
@@ -456,6 +544,7 @@ static int OnNewSSLPacket( struct _TcpStream* stream, DSSL_Pkt* pkt )
 		sess->closing = 1;
 	}
 
+	DEBUG_TRACE1("OnNewSSLPacket - end. rc: %d\n", rc);
 	return rc;
 }
 

@@ -239,15 +239,32 @@ int tls1_decode_finished( DSSL_Session* sess, NM_PacketDir dir, u_char* data, ui
 
 	EVP_MD_CTX_cleanup( &digest );
 
-	rc = tls1_PRF( sess->master_secret, sizeof( sess->master_secret ),
-			label, 
-			buf, (uint32_t)(cur_ptr - buf),
-			NULL, 0, 
-			prf_out, sizeof( prf_out) );
+	if( sess->version == TLS1_VERSION || sess->version == TLS1_1_VERSION )
+	{
+		rc = tls1_PRF( sess->master_secret, sizeof( sess->master_secret ),
+				label, 
+				buf, (uint32_t)(cur_ptr - buf),
+				NULL, 0, 
+				prf_out, sizeof( prf_out) );
+	}
+	else if( sess->version == TLS1_2_VERSION)
+	{
+		/*
+		//rc = tls12_PRF( sess->cipher_digest, sess->master_secret, sizeof( sess->master_secret ),
+		rc = tls12_PRF( "SHA256", sess->master_secret, sizeof( sess->master_secret ),
+				label, 
+				buf, (uint32_t)(cur_ptr - buf),
+				NULL, 0, 
+				prf_out, sizeof( prf_out) );
+		*/
+		return DSSL_RC_OK;
+	}
 
 	if( rc != DSSL_RC_OK ) return rc;
 
-	if( memcmp( data, prf_out, 12 ) != 0 ) return NM_ERROR( DSSL_E_SSL_BAD_FINISHED_DIGEST );
+	if( memcmp( data, prf_out, 12 ) != 0 ) {
+		return NM_ERROR( DSSL_E_SSL_BAD_FINISHED_DIGEST );
+	}
 
 	return DSSL_RC_OK;
 }
